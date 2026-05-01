@@ -1,7 +1,8 @@
 /* Theme Variables */
 :root {
   color-scheme: light;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
 
   /* Light mode: only emerald and white */
   --bg: #ffffff;
@@ -160,9 +161,21 @@ a {
   justify-content: space-between;
 }
 
-.topbar-left { display:flex; align-items:center; }
-.topbar-center { display:flex; align-items:center; justify-content:center; flex:1 }
-.topbar-right { display:flex; align-items:center; gap:0.5rem }
+.topbar-left {
+  display: flex;
+  align-items: center;
+}
+.topbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 
 .app-title {
   margin: 0;
@@ -173,17 +186,23 @@ a {
   font-weight: 700;
 }
 
-.tabs-row { padding: 0 0.5rem 0.5rem 0.5rem }
-.tabs { display:flex; gap:0.5rem; align-items:center }
+.tabs-row {
+  padding: 0 0.5rem 0.5rem 0.5rem;
+}
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
 .tab-link {
   padding: 0.45rem 0.75rem;
   border-radius: 10px;
   color: var(--text-muted);
   background: transparent;
-  display:inline-flex;
-  align-items:center;
-  gap:0.5rem;
-  font-weight:600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
 }
 .tab-link.active {
   color: var(--text);

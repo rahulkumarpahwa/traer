@@ -123,7 +123,9 @@ export default function Header() {
         <nav className="tabs">
           <Link
             to="/"
-            className={location.pathname === "/" ? "tab-link active" : "tab-link"}
+            className={
+              location.pathname === "/" ? "tab-link active" : "tab-link"
+            }
           >
             Dashboard
             {activeJobs && activeJobs.length > 0 ? (
@@ -133,14 +135,18 @@ export default function Header() {
 
           <Link
             to="/settings"
-            className={location.pathname === "/settings" ? "tab-link active" : "tab-link"}
+            className={
+              location.pathname === "/settings" ? "tab-link active" : "tab-link"
+            }
           >
             Endpoints
           </Link>
 
           <Link
             to="/profile"
-            className={location.pathname === "/profile" ? "tab-link active" : "tab-link"}
+            className={
+              location.pathname === "/profile" ? "tab-link active" : "tab-link"
+            }
           >
             Profile
           </Link>
