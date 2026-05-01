@@ -43,18 +43,30 @@ export default function Sidebar() {
   const recentLinks = useStore((state) => state.recentLinks);
   const suggestions = useStore((state) => state.suggestions);
   return (
-    <aside className={`sidebar ${!sidebarOpen ? "collapsed" : ""}`}>
-      <div className="sidebar-block">
-        <p className="sidebar-label">Recent sources</p>
+    <aside
+      className={`${!sidebarOpen ? "hidden" : "block"} bg-white dark:bg-black border-r border-emerald-100 dark:border-emerald-700 p-6 w-72 h-screen overflow-auto`}
+    >
+      <div className="mb-6">
+        <p className="text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold mb-3">
+          Recent sources
+        </p>
         {recentLinks.length === 0 ? (
-          <p className="muted">Your latest media links will appear here.</p>
+          <p className="text-sm text-emerald-500/70">
+            Your latest media links will appear here.
+          </p>
         ) : (
           recentLinks.map((link) => (
-            <div key={link} className="history-item" title={link}>
-              <span className="icon icon-sm">
+            <div
+              key={link}
+              className="flex items-start gap-3 p-2 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-900"
+              title={link}
+            >
+              <span className="w-4 h-4 text-emerald-500">
                 <LinkIcon />
               </span>
-              <span>{link}</span>
+              <span className="text-sm text-emerald-600 dark:text-emerald-300 break-all">
+                {link}
+              </span>
             </div>
           ))
         )}

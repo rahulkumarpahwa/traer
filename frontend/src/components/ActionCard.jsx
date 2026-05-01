@@ -54,20 +54,21 @@ export default function ActionCard({
   const IconComponent = iconMap[kind];
 
   return (
-    <article className="action-card" data-accent={accent}>
-      <div className="card-header">
-        <div>
-          <p className="eyebrow">{kind}</p>
-          <h3 style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
-            {IconComponent && <IconComponent />}
-            {title}
-          </h3>
-        </div>
-        <span className={`pill ${accent}`}>{selectedOption}</span>
+    <article className="bg-white dark:bg-black border-2 border-emerald-500 dark:border-emerald-700 rounded-xl p-6 flex flex-col hover:shadow-lg hover:shadow-emerald-500/20 transition-all duration-200">
+      <div className="mb-3">
+        <p className="text-xs uppercase tracking-widest text-emerald-500/70 font-semibold mb-2">
+          {kind}
+        </p>
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-emerald-600 dark:text-emerald-300">
+          {IconComponent && <IconComponent />}
+          {title}
+        </h3>
       </div>
-      <p className="card-copy">{description}</p>
+      <p className="text-sm text-emerald-500/70 dark:text-emerald-400/70 mb-3">
+        {description}
+      </p>
       <select
-        className="select-field"
+        className="w-full mb-4 px-3 py-2 border-2 border-emerald-100 dark:border-emerald-800 bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 rounded-md text-sm font-medium focus:border-emerald-500 dark:focus:border-emerald-400 outline-none transition-colors"
         value={selectedOption}
         onChange={(event) => setOption(kind, event.target.value)}
       >
@@ -78,7 +79,7 @@ export default function ActionCard({
         ))}
       </select>
       <button
-        className="primary-button"
+        className="w-full mt-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-semibold rounded-md hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:-translate-y-1"
         onClick={() => runJob({ kind, url })}
         disabled={disabled}
       >

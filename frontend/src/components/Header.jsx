@@ -67,6 +67,8 @@ export default function Header() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", theme);
+    if (theme === "dark") root.classList.add("dark");
+    else root.classList.remove("dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
 
@@ -75,82 +77,68 @@ export default function Header() {
   };
 
   return (
-    <header className="topbar-minimal">
-      <div className="topbar-row topbar-row-main">
-        <div className="topbar-left">
-          <button
-            className="icon-button"
-            onClick={toggleSidebar}
-            aria-label="Toggle sidebar"
-            title="Toggle sidebar"
-          >
-            <span className="icon">
+    <header className="bg-white dark:bg-black border-b border-emerald-100 dark:border-emerald-700 sticky top-0 z-20">
+      <div className="flex flex-col gap-1 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <button
+              onClick={toggleSidebar}
+              aria-label="Toggle sidebar"
+              title="Toggle sidebar"
+              className="p-2 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900"
+            >
               <MenuIcon />
-            </span>
-          </button>
-        </div>
+            </button>
+          </div>
 
-        <div className="topbar-center">
-          <h1 className="app-title">TRAER</h1>
-        </div>
+          <div className="pt-2">
+            <nav className="flex items-center gap-2">
+              <Link
+                to="/"
+                className={`${location.pathname === "/" ? "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "text-emerald-500/70"} px-3 py-1 rounded-md font-semibold flex items-center`}
+              >
+                Dashboard
+                {activeJobs && activeJobs.length > 0 ? (
+                  <span className="tab-badge">{activeJobs.length}</span>
+                ) : null}
+              </Link>
 
-        <div className="topbar-right">
-          <button
-            className="icon-button"
-            onClick={toggleTerminal}
-            title="Toggle terminal"
-            aria-label="Toggle terminal"
-          >
-            <span className="icon">
+              <Link
+                to="/settings"
+                className={`${location.pathname === "/settings" ? "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "text-emerald-500/70"} px-3 py-1 rounded-md font-semibold`}
+              >
+                Endpoints
+              </Link>
+
+              <Link
+                to="/profile"
+                className={`${location.pathname === "/profile" ? "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "text-emerald-500/70"} px-3 py-1 rounded-md font-semibold`}
+              >
+                Profile
+              </Link>
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTerminal}
+              title="Toggle terminal"
+              aria-label="Toggle terminal"
+              className="p-2 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900"
+            >
               <TerminalIcon />
-            </span>
-          </button>
+            </button>
 
-          <button
-            className="theme-toggle icon-button"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            title="Toggle dark mode"
-          >
-            <span className="icon">
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              title="Toggle dark mode"
+              className="p-2 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900"
+            >
               {theme === "light" ? <MoonIcon /> : <SunIcon />}
-            </span>
-          </button>
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div className="topbar-row tabs-row">
-        <nav className="tabs">
-          <Link
-            to="/"
-            className={
-              location.pathname === "/" ? "tab-link active" : "tab-link"
-            }
-          >
-            Dashboard
-            {activeJobs && activeJobs.length > 0 ? (
-              <span className="tab-badge">{activeJobs.length}</span>
-            ) : null}
-          </Link>
-
-          <Link
-            to="/settings"
-            className={
-              location.pathname === "/settings" ? "tab-link active" : "tab-link"
-            }
-          >
-            Endpoints
-          </Link>
-
-          <Link
-            to="/profile"
-            className={
-              location.pathname === "/profile" ? "tab-link active" : "tab-link"
-            }
-          >
-            Profile
-          </Link>
-        </nav>
       </div>
     </header>
   );

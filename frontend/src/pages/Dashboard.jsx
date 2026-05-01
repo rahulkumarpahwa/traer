@@ -55,20 +55,20 @@ export default function Dashboard() {
       <div className="workspace">
         <Sidebar />
 
-        <main className="content dashboard-minimal">
-          <section className="search-section">
-            <label htmlFor="source-url" style={{ display: "none" }}>
+        <main className="flex-1 flex items-center justify-center p-16 md:p-8">
+          <section className="w-full max-w-2xl flex flex-col gap-8">
+            <label htmlFor="source-url" className="sr-only">
               Media URL
             </label>
             <input
               id="source-url"
-              className="search-input"
+              className="w-full px-6 py-4 rounded-xl border-2 border-emerald-500 text-emerald-600 bg-white dark:bg-black dark:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:focus:ring-emerald-600 transition-colors"
               placeholder="Paste a YouTube, Loom, Vimeo, or podcast URL"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
             />
 
-            <div className="action-buttons">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {cards.map((card) => (
                 <ActionCard
                   key={card.kind}
@@ -79,8 +79,6 @@ export default function Dashboard() {
               ))}
             </div>
           </section>
-
-          {/* Active jobs moved to header tabs (badge). JobPanel removed from main layout. */}
         </main>
       </div>
 
