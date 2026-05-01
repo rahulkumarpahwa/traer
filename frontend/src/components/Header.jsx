@@ -110,6 +110,13 @@ export default function Header() {
                 Endpoints
               </Link>
 
+               <Link
+                to="/jobs"
+                className={`${location.pathname === "/jobs" ? "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "text-emerald-500/70"} px-3 py-1 rounded-md font-semibold`}
+              >
+                Active Jobs
+              </Link>
+
               <Link
                 to="/profile"
                 className={`${location.pathname === "/profile" ? "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300" : "text-emerald-500/70"} px-3 py-1 rounded-md font-semibold`}

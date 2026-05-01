@@ -4,6 +4,8 @@ export default function JobPanel() {
   const activeJobs = useStore((state) => state.activeJobs);
 
   return (
+
+    
     <section className="bg-white dark:bg-black border-2 border-emerald-500 dark:border-emerald-700 rounded-xl p-8">
       <div className="mb-6">
         <p className="text-xs uppercase tracking-widest text-emerald-500/70 font-semibold mb-2">
