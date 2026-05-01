@@ -1,10 +1,8 @@
 import { useState } from "react";
 import ActionCard from "../components/ActionCard";
 import Header from "../components/Header";
-// JobPanel moved to tab/indicator area; remove inline panel from Dashboard
 import NotificationTray from "../components/NotificationTray";
 import Sidebar from "../components/Sidebar";
-import Terminal from "../components/Terminal";
 import { useStore } from "../store/useStore";
 
 const cards = [
@@ -126,8 +124,6 @@ export default function Dashboard() {
           </section>
         </main>
       </div>
-
-      <Terminal />
     </div>
   );
 }

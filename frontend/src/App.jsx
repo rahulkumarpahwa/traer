@@ -3,6 +3,7 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import TerminalPage from "./pages/TerminalPage";
 import { useHydrateApp } from "./store/useStore";
 import JobPanel from "./components/JobPanel";
 
@@ -16,6 +17,7 @@ function AppRoutes() {
       <Route path="/settings" element={<Settings />} />
       <Route path="/profile" element={<Profile />} />
       <Route path="/jobs" element={<JobPanel />} />
+      <Route path="/terminal" element={<TerminalPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

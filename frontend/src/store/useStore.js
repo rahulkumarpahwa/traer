@@ -21,7 +21,6 @@ export const useStore = create((set, get) => ({
   appName: "traer",
   hydrated: false,
   sidebarOpen: true,
-  terminalOpen: true,
   capabilities: {
     backendBound: false,
     mockMode: true,
@@ -60,7 +59,6 @@ export const useStore = create((set, get) => ({
     });
   },
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-  toggleTerminal: () => set((state) => ({ terminalOpen: !state.terminalOpen })),
   addNotification: (notification) =>
     set((state) => ({
       notifications: [

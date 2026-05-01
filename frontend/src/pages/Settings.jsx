@@ -1,7 +1,6 @@
 import Header from "../components/Header";
 import NotificationTray from "../components/NotificationTray";
 import Sidebar from "../components/Sidebar";
-import Terminal from "../components/Terminal";
 import { useStore } from "../store/useStore";
 import { useEffect, useState } from "react";
 
@@ -40,15 +39,17 @@ export default function Settings() {
       <div className="workspace">
         <Sidebar />
 
-        <main className="flex-1 p-8 overflow-auto">
-          <section className="bg-white dark:bg-black border-2 border-emerald-500 dark:border-emerald-700 rounded-xl p-8 max-w-2xl">
-            <p className="text-xs uppercase tracking-widest text-emerald-500/70 font-semibold mb-2">
+        <main className="relative flex-1 overflow-hidden">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.15),transparent_28%),radial-gradient(circle_at_top_right,rgba(6,182,212,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.8),rgba(240,253,250,0.55))] dark:bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_24%),radial-gradient(circle_at_top_right,rgba(6,182,212,0.14),transparent_24%),linear-gradient(180deg,rgba(4,17,11,1),rgba(6,24,17,0.95))]" />
+          <section className="relative flex min-h-full items-center justify-center px-6 py-8 md:px-8 xl:px-10">
+            <section className="w-full max-w-3xl rounded-[32px] border border-emerald-500/15 bg-white/85 p-8 shadow-[0_24px_80px_-40px_rgba(5,46,22,0.45)] backdrop-blur-sm dark:border-emerald-400/10 dark:bg-[#07150f]/90 dark:shadow-[0_24px_80px_-40px_rgba(16,185,129,0.3)]">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-emerald-700/55 dark:text-emerald-200/55">
               Configuration
             </p>
-            <h2 className="text-2xl font-bold text-emerald-600 dark:text-emerald-300 mb-3">
+            <h2 className="mb-3 text-3xl font-semibold text-slate-950 dark:text-emerald-50">
               Service endpoints
             </h2>
-            <p className="text-sm text-emerald-500/70 dark:text-emerald-400/70 mb-6">
+            <p className="mb-6 text-sm leading-6 text-slate-600 dark:text-emerald-100/65">
               These values are already wired through the app bridge, so swapping
               to real backend implementations later will be straightforward.
             </p>
@@ -56,14 +57,14 @@ export default function Settings() {
             <form className="space-y-4" onSubmit={onSubmit}>
               <div>
                 <label
-                  className="block text-sm font-semibold text-emerald-600 dark:text-emerald-300 mb-2"
+                  className="mb-2 block text-sm font-semibold text-slate-800 dark:text-emerald-100"
                   htmlFor="whisper-url"
                 >
                   Whisper API URL
                 </label>
                 <input
                   id="whisper-url"
-                  className="w-full px-4 py-2 border-2 border-emerald-100 dark:border-emerald-800 bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 rounded-md focus:border-emerald-500 dark:focus:border-emerald-400 outline-none transition-colors"
+                  className="w-full rounded-2xl border border-emerald-500/12 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500/40 focus:ring-4 focus:ring-emerald-500/10 dark:border-emerald-400/10 dark:bg-[#0a1912] dark:text-emerald-50"
                   value={form.whisperUrl}
                   onChange={(event) =>
                     onChange("whisperUrl", event.target.value)
@@ -73,14 +74,14 @@ export default function Settings() {
 
               <div>
                 <label
-                  className="block text-sm font-semibold text-emerald-600 dark:text-emerald-300 mb-2"
+                  className="mb-2 block text-sm font-semibold text-slate-800 dark:text-emerald-100"
                   htmlFor="ollama-url"
                 >
                   Ollama URL
                 </label>
                 <input
                   id="ollama-url"
-                  className="w-full px-4 py-2 border-2 border-emerald-100 dark:border-emerald-800 bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 rounded-md focus:border-emerald-500 dark:focus:border-emerald-400 outline-none transition-colors"
+                  className="w-full rounded-2xl border border-emerald-500/12 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500/40 focus:ring-4 focus:ring-emerald-500/10 dark:border-emerald-400/10 dark:bg-[#0a1912] dark:text-emerald-50"
                   value={form.ollamaUrl}
                   onChange={(event) =>
                     onChange("ollamaUrl", event.target.value)
@@ -90,14 +91,14 @@ export default function Settings() {
 
               <div>
                 <label
-                  className="block text-sm font-semibold text-emerald-600 dark:text-emerald-300 mb-2"
+                  className="mb-2 block text-sm font-semibold text-slate-800 dark:text-emerald-100"
                   htmlFor="cloud-url"
                 >
                   Cloud URL
                 </label>
                 <input
                   id="cloud-url"
-                  className="w-full px-4 py-2 border-2 border-emerald-100 dark:border-emerald-800 bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 rounded-md focus:border-emerald-500 dark:focus:border-emerald-400 outline-none transition-colors"
+                  className="w-full rounded-2xl border border-emerald-500/12 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500/40 focus:ring-4 focus:ring-emerald-500/10 dark:border-emerald-400/10 dark:bg-[#0a1912] dark:text-emerald-50"
                   value={form.cloudUrl}
                   onChange={(event) => onChange("cloudUrl", event.target.value)}
                 />
@@ -105,14 +106,14 @@ export default function Settings() {
 
               <div>
                 <label
-                  className="block text-sm font-semibold text-emerald-600 dark:text-emerald-300 mb-2"
+                  className="mb-2 block text-sm font-semibold text-slate-800 dark:text-emerald-100"
                   htmlFor="output-dir"
                 >
                   Output directory
                 </label>
                 <input
                   id="output-dir"
-                  className="w-full px-4 py-2 border-2 border-emerald-100 dark:border-emerald-800 bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 rounded-md focus:border-emerald-500 dark:focus:border-emerald-400 outline-none transition-colors"
+                  className="w-full rounded-2xl border border-emerald-500/12 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500/40 focus:ring-4 focus:ring-emerald-500/10 dark:border-emerald-400/10 dark:bg-[#0a1912] dark:text-emerald-50"
                   value={form.outputDir}
                   onChange={(event) =>
                     onChange("outputDir", event.target.value)
@@ -122,14 +123,14 @@ export default function Settings() {
 
               <div>
                 <label
-                  className="block text-sm font-semibold text-emerald-600 dark:text-emerald-300 mb-2"
+                  className="mb-2 block text-sm font-semibold text-slate-800 dark:text-emerald-100"
                   htmlFor="theme"
                 >
                   Theme
                 </label>
                 <select
                   id="theme"
-                  className="w-full px-4 py-2 border-2 border-emerald-100 dark:border-emerald-800 bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 rounded-md focus:border-emerald-500 dark:focus:border-emerald-400 outline-none transition-colors"
+                  className="w-full rounded-2xl border border-emerald-500/12 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500/40 focus:ring-4 focus:ring-emerald-500/10 dark:border-emerald-400/10 dark:bg-[#0a1912] dark:text-emerald-50"
                   value={form.theme}
                   onChange={(event) => onChange("theme", event.target.value)}
                 >
@@ -140,18 +141,17 @@ export default function Settings() {
               </div>
 
               <button
-                className="w-full mt-6 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-semibold rounded-md hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-400 dark:text-slate-950 dark:hover:bg-emerald-300"
                 type="submit"
                 disabled={saving}
               >
                 {saving ? "Saving..." : "Save settings"}
               </button>
             </form>
+            </section>
           </section>
         </main>
       </div>
-
-      <Terminal />
     </div>
   );
 }
