@@ -1,4 +1,4 @@
-# 🚀 TRAER — Desktop Media Toolkit
+#  TRAER — Desktop Media Toolkit
 
 TRAER is a **desktop application** built with **Go (backend)** and a modern **React + Tailwind UI** using Wails.
 
@@ -13,18 +13,18 @@ It allows you to:
 
 ---
 
-# 🧱 Tech Stack
+#  Tech Stack
 
-## 🖥️ Desktop Layer
+##  Desktop Layer
 
 * Wails
 
-## ⚙️ Backend
+##  Backend
 
 * Go (you will implement)
 * Optional: SQLite / remote DB for auth
 
-## 🎨 Frontend
+## Frontend
 
 * React (latest)
 * Vite
@@ -34,7 +34,7 @@ It allows you to:
 
 ---
 
-# 📁 Project Structure
+#  Project Structure
 
 ```bash
 traer/
@@ -47,7 +47,7 @@ traer/
 
 ---
 
-# 📦 Frontend Structure
+# Frontend Structure
 
 ```bash
 frontend/
@@ -67,11 +67,11 @@ frontend/
 
 ---
 
-# ✨ Features
+#  Features
 
-## 🎯 Core Features
+##  Core Features
 
-### 📝 Transcription
+### Transcription
 
 * Input YouTube URL
 * Output formats:
@@ -80,7 +80,7 @@ frontend/
   * `.mdx`
   * `.txt`
 
-### 🔊 Audio Conversion
+### Audio Conversion
 
 * Convert video → audio
 * Supported formats:
@@ -89,13 +89,13 @@ frontend/
   * WAV
   * AAC
 
-### 🎥 Video Download
+### Video Download
 
 * Quality selection:
 
   * 144p → 1080p
 
-### ☁️ Open Cloud Integration
+###  Open Cloud Integration
 
 * Send:
 
@@ -105,7 +105,7 @@ frontend/
 
 ---
 
-## 🧩 UI Features
+##  UI Features
 
 * Collapsible sidebar (recent links)
 * Bottom terminal panel (logs)
@@ -115,13 +115,7 @@ frontend/
 
 ---
 
-## 🔐 Authentication
-
-### Recommended Approach (IMPORTANT)
-
-Do NOT store auth in frontend.
-
-✔ Use backend:
+##  Authentication
 
 * API-based login
 * Secure storage (SQLite or server DB)
@@ -134,9 +128,9 @@ Login → API → Validate → Store session
 
 ---
 
-# ⚙️ Setup Instructions
+#  Setup Instructions
 
-## 1️⃣ Install Requirements
+## Install Requirements
 
 * Go (>= 1.20)
 * Node.js (>= 18)
@@ -151,7 +145,7 @@ go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
 ---
 
-## 2️⃣ Create Wails App
+## Create Wails App
 
 ```bash
 wails init -n traer -t react
@@ -160,7 +154,7 @@ cd traer
 
 ---
 
-## 3️⃣ Replace Frontend
+## Replace Frontend
 
 Delete default frontend and copy:
 
@@ -170,7 +164,7 @@ your/frontend → traer/frontend
 
 ---
 
-## 4️⃣ Install Frontend Dependencies
+## Install Frontend Dependencies
 
 ```bash
 cd frontend
@@ -179,18 +173,18 @@ npm install
 
 ---
 
-## 5️⃣ Run App (Development)
+## Run App (Development)
 
 ```bash
 wails dev
 ```
 
-✔ Hot reload enabled
-✔ UI updates instantly
+Hot reload enabled
+UI updates instantly
 
 ---
 
-## 6️⃣ Build Desktop App
+## Build Desktop App
 
 ```bash
 wails build
@@ -204,7 +198,7 @@ build/bin/traer.exe
 
 ---
 
-# 🔌 Backend Integration (Go ↔ UI)
+#  Backend Integration (Go ↔ UI)
 
 Wails auto-generates bindings.
 
@@ -226,7 +220,7 @@ ConvertAudio(url).then(res => console.log(res));
 
 ---
 
-# 🧠 Suggested Backend Modules
+#  Suggested Backend Modules
 
 You should implement:
 
@@ -239,39 +233,39 @@ You should implement:
 
 ---
 
-### 2. Transcription
+###  Transcription
 
 * Whisper (local)
 * Output formatter (MD/MDX)
 
 ---
 
-### 3. Audio Conversion
+###  Audio Conversion
 
 * ffmpeg integration
 
 ---
 
-### 4. Cloud Upload
+###  Cloud Upload
 
 * HTTP client → your server
 
 ---
 
-### 5. Authentication
+###  Authentication
 
 * Login endpoint
 * Session/token handling
 
 ---
 
-### 6. Terminal Logs
+### Terminal Logs
 
 * Stream logs → UI
 
 ---
 
-# 🎨 UI Customization
+#  UI Customization
 
 ## Run frontend independently
 
@@ -291,7 +285,7 @@ tailwind.config.js
 
 ---
 
-# 🔄 State Management (Zustand)
+#  State Management (Zustand)
 
 Example:
 
@@ -307,7 +301,7 @@ Used for:
 
 ---
 
-# 🧪 Future Enhancements
+#  Future Enhancements
 
 * Progress bars (conversion)
 * Notifications (success/error)
@@ -315,69 +309,3 @@ Used for:
 * Batch processing
 * File preview
 * Multi-user auth
-
----
-
-# ⚠️ Security Notes
-
-* Never store API keys in plain text frontend
-* Use backend encryption
-* Validate all inputs
-* Avoid exposing shell directly
-
----
-
-# 🧰 Troubleshooting
-
-## App not starting
-
-* Check Node + Go versions
-
-## UI not loading
-
-```bash
-cd frontend
-npm install
-```
-
-## Wails issues
-
-```bash
-wails doctor
-```
-
----
-
-# 📌 Development Workflow
-
-1. Run:
-
-```bash
-wails dev
-```
-
-2. Edit UI in `/frontend`
-3. Connect Go functions
-4. Test live
-
----
-
-# 📄 License
-
-MIT (or your choice)
-
----
-
-
-# 🔥 Final Notes
-
-This project is:
-
-* Desktop-first
-* Modular
-* Scalable
-
-You now have:
-✔ Full UI
-✔ Clean architecture
-✔ Ready for backend integration

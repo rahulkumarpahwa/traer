@@ -9,27 +9,50 @@ const navItems = [
 ];
 
 const MenuIcon = () => (
-  <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <svg viewBox="0 0 24 24">
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
 );
 
 const SunIcon = () => (
-  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  <svg viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="5" />
+    <line x1="12" y1="1" x2="12" y2="3" />
+    <line x1="12" y1="21" x2="12" y2="23" />
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+    <line x1="1" y1="12" x2="3" y2="12" />
+    <line x1="21" y1="12" x2="23" y2="12" />
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+  </svg>
 );
 
 const MoonIcon = () => (
-  <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg viewBox="0 0 24 24">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
 );
 
 const TerminalIcon = () => (
-  <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+  <svg viewBox="0 0 24 24">
+    <polyline points="4 17 10 11 4 5" />
+    <line x1="12" y1="19" x2="20" y2="19" />
+  </svg>
 );
 
 const CheckIcon = () => (
-  <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+  <svg viewBox="0 0 24 24">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
 );
 
 const CircleIcon = () => (
-  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+  <svg viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+  </svg>
 );
 
 export default function Header() {
@@ -38,6 +61,7 @@ export default function Header() {
   const appName = useStore((state) => state.appName);
   const toggleSidebar = useStore((state) => state.toggleSidebar);
   const toggleTerminal = useStore((state) => state.toggleTerminal);
+  const activeJobs = useStore((state) => state.activeJobs);
   const capabilities = useStore((state) => state.capabilities);
 
   useEffect(() => {
@@ -51,45 +75,76 @@ export default function Header() {
   };
 
   return (
-    <header className="topbar">
-      <div className="brand-row">
-        <button className="icon-button" onClick={toggleSidebar} aria-label="Toggle sidebar" title="Toggle sidebar">
-          <span className="icon"><MenuIcon /></span>
-        </button>
-        <div>
-          <p className="eyebrow">Media workflows</p>
-          <h1>{appName}</h1>
+    <header className="topbar-minimal">
+      <div className="topbar-row topbar-row-main">
+        <div className="topbar-left">
+          <button
+            className="icon-button"
+            onClick={toggleSidebar}
+            aria-label="Toggle sidebar"
+            title="Toggle sidebar"
+          >
+            <span className="icon">
+              <MenuIcon />
+            </span>
+          </button>
+        </div>
+
+        <div className="topbar-center">
+          <h1 className="app-title">TRAER</h1>
+        </div>
+
+        <div className="topbar-right">
+          <button
+            className="icon-button"
+            onClick={toggleTerminal}
+            title="Toggle terminal"
+            aria-label="Toggle terminal"
+          >
+            <span className="icon">
+              <TerminalIcon />
+            </span>
+          </button>
+
+          <button
+            className="theme-toggle icon-button"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            title="Toggle dark mode"
+          >
+            <span className="icon">
+              {theme === "light" ? <MoonIcon /> : <SunIcon />}
+            </span>
+          </button>
         </div>
       </div>
 
-      <nav className="nav-row" aria-label="Primary">
-        {navItems.map((item) => (
+      <div className="topbar-row tabs-row">
+        <nav className="tabs">
           <Link
-            key={item.to}
-            to={item.to}
-            className={location.pathname === item.to ? "nav-link active" : "nav-link"}
-            title={item.label}
+            to="/"
+            className={location.pathname === "/" ? "tab-link active" : "tab-link"}
           >
-            {item.label}
+            Dashboard
+            {activeJobs && activeJobs.length > 0 ? (
+              <span className="tab-badge">{activeJobs.length}</span>
+            ) : null}
           </Link>
-        ))}
-      </nav>
 
-      <div className="status-row">
-        <span className={capabilities.backendBound ? "badge success" : "badge"}>
-          <span className="icon icon-sm">
-            {capabilities.backendBound ? <CheckIcon /> : <CircleIcon />}
-          </span>
-          <span>{capabilities.backendBound ? "Connected" : "Preview"}</span>
-        </span>
-        <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle dark mode">
-          <span className="icon">
-            {theme === "light" ? <MoonIcon /> : <SunIcon />}
-          </span>
-        </button>
-        <button className="icon-button" onClick={toggleTerminal} title="Toggle terminal">
-          <span className="icon"><TerminalIcon /></span>
-        </button>
+          <Link
+            to="/settings"
+            className={location.pathname === "/settings" ? "tab-link active" : "tab-link"}
+          >
+            Endpoints
+          </Link>
+
+          <Link
+            to="/profile"
+            className={location.pathname === "/profile" ? "tab-link active" : "tab-link"}
+          >
+            Profile
+          </Link>
+        </nav>
       </div>
     </header>
   );

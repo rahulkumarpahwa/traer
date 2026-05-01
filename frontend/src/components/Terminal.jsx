@@ -3,6 +3,7 @@ import { useStore } from "../store/useStore";
 
 export default function Terminal() {
   const terminalOpen = useStore((state) => state.terminalOpen);
+  const toggleTerminal = useStore((state) => state.toggleTerminal);
   const terminalLines = useStore((state) => state.terminalLines);
   const bodyRef = useRef(null);
 
@@ -18,7 +19,11 @@ export default function Terminal() {
 
   return (
     <section className="terminal">
-      <div className="terminal-header">
+      <div
+        className="terminal-header"
+        onClick={toggleTerminal}
+        title="Click to minimize"
+      >
         <span>Runtime terminal</span>
         <span className="muted">{terminalLines.length} entries</span>
       </div>

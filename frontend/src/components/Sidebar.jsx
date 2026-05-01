@@ -2,23 +2,39 @@ import { Link, useLocation } from "react-router-dom";
 import { useStore } from "../store/useStore";
 
 const DashboardIcon = () => (
-  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+  <svg viewBox="0 0 24 24">
+    <rect x="3" y="3" width="7" height="7" />
+    <rect x="14" y="3" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" />
+  </svg>
 );
 
 const SettingsIcon = () => (
-  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6m-15.78 7.78l4.24-4.24m4.24-4.24l4.24-4.24"/></svg>
+  <svg viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6m-15.78 7.78l4.24-4.24m4.24-4.24l4.24-4.24" />
+  </svg>
 );
 
 const UserIcon = () => (
-  <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+  <svg viewBox="0 0 24 24">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
 );
 
 const LinkIcon = () => (
-  <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+  <svg viewBox="0 0 24 24">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </svg>
 );
 
 const LightbulbIcon = () => (
-  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  <svg viewBox="0 0 24 24">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
 );
 
 export default function Sidebar() {
@@ -26,35 +42,8 @@ export default function Sidebar() {
   const sidebarOpen = useStore((state) => state.sidebarOpen);
   const recentLinks = useStore((state) => state.recentLinks);
   const suggestions = useStore((state) => state.suggestions);
-
-  if (!sidebarOpen) {
-    return null;
-  }
-
   return (
-    <aside className="sidebar">
-      <div className="sidebar-block">
-        <p className="sidebar-label">Quick access</p>
-        <Link className={location.pathname === "/" ? "sidebar-link active" : "sidebar-link"} to="/">
-          <span className="icon"><DashboardIcon /></span>
-          <span>Dashboard</span>
-        </Link>
-        <Link
-          className={location.pathname === "/settings" ? "sidebar-link active" : "sidebar-link"}
-          to="/settings"
-        >
-          <span className="icon"><SettingsIcon /></span>
-          <span>Endpoints</span>
-        </Link>
-        <Link
-          className={location.pathname === "/profile" ? "sidebar-link active" : "sidebar-link"}
-          to="/profile"
-        >
-          <span className="icon"><UserIcon /></span>
-          <span>Operator</span>
-        </Link>
-      </div>
-
+    <aside className={`sidebar ${!sidebarOpen ? "collapsed" : ""}`}>
       <div className="sidebar-block">
         <p className="sidebar-label">Recent sources</p>
         {recentLinks.length === 0 ? (
@@ -62,21 +51,13 @@ export default function Sidebar() {
         ) : (
           recentLinks.map((link) => (
             <div key={link} className="history-item" title={link}>
-              <span className="icon icon-sm"><LinkIcon /></span>
+              <span className="icon icon-sm">
+                <LinkIcon />
+              </span>
               <span>{link}</span>
             </div>
           ))
         )}
-      </div>
-
-      <div className="sidebar-block">
-        <p className="sidebar-label">Suggested flow</p>
-        {suggestions.map((suggestion) => (
-          <div key={suggestion} className="suggestion-item">
-            <span className="icon icon-sm"><LightbulbIcon /></span>
-            <p className="muted">{suggestion}</p>
-          </div>
-        ))}
       </div>
     </aside>
   );
