@@ -9,7 +9,7 @@ const navItems = [
 ];
 
 const MenuIcon = () => (
-  <svg viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24" stroke="black" fill="none" strokeWidth="2">
     <line x1="3" y1="6" x2="21" y2="6" />
     <line x1="3" y1="12" x2="21" y2="12" />
     <line x1="3" y1="18" x2="21" y2="18" />
@@ -17,7 +17,7 @@ const MenuIcon = () => (
 );
 
 const SunIcon = () => (
-  <svg viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24" stroke="black" fill="none" strokeWidth="2">
     <circle cx="12" cy="12" r="5" />
     <line x1="12" y1="1" x2="12" y2="3" />
     <line x1="12" y1="21" x2="12" y2="23" />
@@ -31,26 +31,26 @@ const SunIcon = () => (
 );
 
 const MoonIcon = () => (
-  <svg viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24" stroke="black" fill="none" strokeWidth="2">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </svg>
 );
 
 const TerminalIcon = () => (
-  <svg viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24" stroke="black" fill="none" strokeWidth="2">
     <polyline points="4 17 10 11 4 5" />
     <line x1="12" y1="19" x2="20" y2="19" />
   </svg>
 );
 
 const CheckIcon = () => (
-  <svg viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24" stroke="black" fill="none" strokeWidth="2">
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
 
 const CircleIcon = () => (
-  <svg viewBox="0 0 24 24">
+  <svg viewBox="0 0 24 24" stroke="black" fill="none" strokeWidth="2">
     <circle cx="12" cy="12" r="10" />
   </svg>
 );
