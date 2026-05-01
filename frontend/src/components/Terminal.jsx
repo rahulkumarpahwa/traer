@@ -16,16 +16,16 @@ export default function Terminal() {
   if (!terminalOpen) return null;
 
   return (
-    <section className="fixed bottom-0 left-0 right-0 max-h-56 bg-white dark:bg-black border-t border-emerald-100 dark:border-emerald-700 overflow-auto text-sm font-mono text-emerald-600">
+    <section className="fixed bottom-0 left-0 right-0 max-h-64 overflow-auto border-t border-emerald-500/10 bg-[#f7faf8]/90 text-sm font-mono text-slate-700 backdrop-blur-xl dark:border-emerald-400/10 dark:bg-[#031009]/92 dark:text-emerald-100/80">
       <div
-        className="flex items-center justify-between p-2 border-b border-emerald-50 dark:border-emerald-800"
+        className="flex items-center justify-between border-b border-emerald-500/10 px-3 py-3 dark:border-emerald-400/10"
         onClick={toggleTerminal}
         title="Click to minimize"
       >
-        <span className="text-emerald-700 dark:text-emerald-300">
+        <span className="font-medium text-slate-900 dark:text-emerald-50">
           Runtime terminal
         </span>
-        <span className="text-emerald-500/70">
+        <span className="text-slate-500 dark:text-emerald-100/55">
           {terminalLines.length} entries
         </span>
       </div>
@@ -33,7 +33,7 @@ export default function Terminal() {
         {terminalLines.map((line, index) => (
           <p
             key={`${line}-${index}`}
-            className="text-emerald-600 dark:text-emerald-400"
+            className="text-slate-700 dark:text-emerald-100/75"
           >
             {line}
           </p>

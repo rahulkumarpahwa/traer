@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial;
+    --font-sans: "Segoe UI", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   }
   html {
     font-family: var(--font-sans);
@@ -16,22 +16,22 @@
     color-scheme: dark;
   }
   body {
-    @apply bg-white dark:bg-black text-emerald-600 dark:text-emerald-300 transition-colors;
+    @apply bg-[#f4faf6] text-slate-900 transition-colors dark:bg-[#04110b] dark:text-emerald-100;
+  }
+  #root {
+    min-height: 100vh;
   }
 }
 
 @layer components {
   .app-shell {
-    @apply min-h-screen flex flex-col bg-white dark:bg-black;
+    @apply min-h-screen flex flex-col bg-transparent;
   }
   .workspace {
     @apply flex flex-1;
   }
-  .app-title {
-    @apply uppercase tracking-widest text-emerald-500 font-semibold text-sm;
-  }
   .tab-badge {
-    @apply ml-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full;
+    @apply ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs text-current dark:bg-black/10;
   }
 }
 
