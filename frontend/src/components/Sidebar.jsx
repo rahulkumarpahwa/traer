@@ -1,15 +1,17 @@
+import { Link, useLocation } from "react-router-dom";
 import { useStore } from "../store/useStore";
-import { Link2 } from "lucide-react";
+import { Link2, Settings2 } from "lucide-react";
 
 export default function Sidebar() {
+  const location = useLocation();
   const sidebarOpen = useStore((state) => state.sidebarOpen);
   const recentLinks = useStore((state) => state.recentLinks);
 
   return (
     <aside
-      className={`${!sidebarOpen ? "hidden" : "block"} w-80 shrink-0 border-r border-emerald-500/10 bg-white/70 p-6 backdrop-blur-xl dark:border-emerald-400/10 dark:bg-[#04110b]/70`}
+      className={`${!sidebarOpen ? "hidden" : "flex"} w-80 shrink-0 flex-col border-r border-emerald-500/10 bg-white/70 p-6 backdrop-blur-xl dark:border-emerald-400/10 dark:bg-[#04110b]/70`}
     >
-      <div className="mb-6">
+      <div className="mb-6 flex-1">
         <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.26em] text-emerald-700/55 dark:text-emerald-200/55">
           Recent sources
         </p>
@@ -34,6 +36,14 @@ export default function Sidebar() {
           ))
         )}
       </div>
+
+      <Link
+        to="/settings"
+        className={`${location.pathname === "/settings" ? "border-emerald-500/20 bg-slate-950 text-white dark:bg-emerald-400 dark:text-slate-950" : "border-emerald-500/10 bg-white/70 text-slate-700 dark:bg-white/[0.03] dark:text-emerald-100/80"} mt-auto inline-flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold transition hover:border-emerald-500/20 hover:text-emerald-700 dark:hover:text-emerald-50`}
+      >
+        <Settings2 className="h-4 w-4" strokeWidth={1.8} />
+        Settings
+      </Link>
     </aside>
   );
 }
