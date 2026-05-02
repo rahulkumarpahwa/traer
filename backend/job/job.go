@@ -1,20 +1,26 @@
 package job
 
 import (
-	"github.com/rahulkumarpahwa/traer/types"
-	"github.com/rahulkumarpahwa/traer/utils"
+	"bufio"
+	"fmt"
+	"io"
 	"os/exec"
 	"regexp"
+	"strconv"
+
+	"github.com/rahulkumarpahwa/traer/types"
+	"github.com/rahulkumarpahwa/traer/utils"
 )
 
 var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+\.\d+)%`)
 
-func AddJob(url string) *types.Job {
+func AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
 		ID:     utils.GenerateID(),
 		URL:    url,
 		Status: types.StatusQueued,
+		Type:   contentType,
 	}
 
 	jobQueue <- job
@@ -38,8 +44,8 @@ func processJob(job *types.Job) {
 
 	cmd := buildCommand(job)
 
-	// stdout, _ := cmd.StdoutPipe()
-	// stderr, _ := cmd.StderrPipe()
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
 		job.Status = types.StatusFailed
@@ -48,8 +54,8 @@ func processJob(job *types.Job) {
 	}
 
 	// Read both stdout & stderr
-	// go parseOutput(stdout, job)
-	// go parseOutput(stderr, job)
+	go parseOutput(stdout, job)
+	go parseOutput(stderr, job)
 
 	err := cmd.Wait()
 	if err != nil {
@@ -96,4 +102,28 @@ func buildCommand(job *types.Job) *exec.Cmd {
 	}
 
 	return nil
+}
+
+func parseOutput(pipe io.ReadCloser, job *types.Job) {
+	scanner := bufio.NewScanner(pipe)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		match := progressRegex.FindStringSubmatch(line)
+		if len(match) > 1 {
+			progress, err := strconv.ParseFloat(match[1], 64)
+			if err == nil {
+				job.MU.Lock()
+				job.Progress = progress
+				job.MU.Unlock()
+			}
+		}
+	}
+
+
+    if err := scanner.Err(); err != nil {
+        // handle or log the error
+        fmt.Println("Error reading output:", err)
+    }
 }

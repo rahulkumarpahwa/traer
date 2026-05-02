@@ -26,5 +26,5 @@ type Job struct {
 	Progress float64
 	Output   string
 	Error    string
-	mu       sync.Mutex
+	MU       sync.Mutex
 }
