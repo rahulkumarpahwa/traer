@@ -4,6 +4,7 @@ import (
     "encoding/json"
     "log"
     "net/http"
+	"github.com/google/uuid"
 )
 
 // JSONResponse writes a JSON response with the given status code and data.
@@ -29,4 +30,10 @@ func ErrorResponse(w http.ResponseWriter, status int, err error) {
     }
 
     JSONResponse(w, status, response)
+}
+
+// generateID creates and returns a new UUID string
+func GenerateID() string {
+    id := uuid.New()
+    return id.String()
 }
