@@ -12,7 +12,7 @@ import (
 )
 
 type ServiceHandler struct {
-	JW *job.JobWoker
+	JW *job.JobWorker
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {

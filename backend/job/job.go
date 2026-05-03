@@ -15,7 +15,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/utils"
 )
 
-type JobWoker struct {
+type JobWorker struct {
 	startOnce sync.Once
 }
 
@@ -27,7 +27,7 @@ var JobsMu sync.RWMutex
 
 var WorkerInstances int = 2
 
-func (jw *JobWoker) AddJob(url string, contentType types.ContentType) *types.Job {
+func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
 		ID:     utils.GenerateID(),
 		URL:    url,
@@ -57,7 +57,7 @@ func GetJob(id string) *types.Job {
 	return job
 }
 
-func (jw *JobWoker) StartWorkers() {
+func (jw *JobWorker) StartWorkers() {
 	jw.startOnce.Do(func() {
 		if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
 			panic(err)

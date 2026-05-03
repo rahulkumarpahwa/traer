@@ -19,7 +19,7 @@ func main() {
 	router := http.NewServeMux()
 
 	// Creating the job worker
-	jobworker := job.JobWoker{}
+	jobworker := job.JobWorker{}
 
 	// Creating the new Service Hanlder
 	serviceHandler := routes.ServiceHandler{JW: &jobworker}
