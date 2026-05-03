@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ func main() {
 	// Creating the new Service Hanlder
 	serviceHandler := routes.ServiceHandler{}
 
+	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
 	router.HandleFunc("GET /jobs/active", serviceHandler.HandleActiveJobs)
 	router.HandleFunc("POST /instances/set", serviceHandler.HandleSetInstances)
@@ -54,4 +56,10 @@ func main() {
 	}
 
 	log.Println("Server Shutdown Successfully!")
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+    // Simple liveness check
+    w.WriteHeader(http.StatusOK)
+    fmt.Fprintln(w, "OK")
 }
