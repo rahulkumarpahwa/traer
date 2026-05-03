@@ -44,6 +44,13 @@ func AddJob(url string, contentType types.ContentType) *types.Job {
 	return job
 }
 
+func GetJob(id string) *types.Job {
+	jobsMu.RLock()
+	job := jobs[id]
+	jobsMu.RUnlock()
+	return job
+}
+
 func StartWorkers(n int) {
 	// creating the downloads folder
 	if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
