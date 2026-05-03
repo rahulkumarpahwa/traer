@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rahulkumarpahwa/traer/job"
 	"github.com/rahulkumarpahwa/traer/routes"
 )
 
@@ -17,8 +18,11 @@ func main() {
 
 	router := http.NewServeMux()
 
+	// Creating the job worker
+	jobworker := job.JobWoker{}
+
 	// Creating the new Service Hanlder
-	serviceHandler := routes.ServiceHandler{}
+	serviceHandler := routes.ServiceHandler{JW: &jobworker}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
@@ -59,7 +63,7 @@ func main() {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-    // Simple liveness check
-    w.WriteHeader(http.StatusOK)
-    fmt.Fprintln(w, "OK")
+	// Simple liveness check
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "OK")
 }

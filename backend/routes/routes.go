@@ -12,6 +12,7 @@ import (
 )
 
 type ServiceHandler struct {
+	JW *job.JobWoker
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +44,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	job := job.AddJob(req.URL, contentType)
+	job := hs.JW.AddJob(req.URL, contentType)
 
 	utils.JSONResponse(w, http.StatusOK, job)
 }

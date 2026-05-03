@@ -15,15 +15,19 @@ import (
 	"github.com/rahulkumarpahwa/traer/utils"
 )
 
+type JobWoker struct {
+	startOnce sync.Once
+}
+
 var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
 var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
 var JobsMu sync.RWMutex
 
-var WorkerInstances int
+var WorkerInstances int = 2
 
-func AddJob(url string, contentType types.ContentType) *types.Job {
+func (jw *JobWoker) AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
 		ID:     utils.GenerateID(),
 		URL:    url,
@@ -53,15 +57,16 @@ func GetJob(id string) *types.Job {
 	return job
 }
 
-func StartWorkers() {
-	// creating the downloads folder
-	if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
-		panic(err) // or handle properly
-	}
+func (jw *JobWoker) StartWorkers() {
+	jw.startOnce.Do(func() {
+		if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
+			panic(err)
+		}
 
-	for i := 0; i < WorkerInstances; i++ {
-		go worker()
-	}
+		for i := 0; i < WorkerInstances; i++ {
+			go worker()
+		}
+	})
 }
 
 func worker() {
