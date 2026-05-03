@@ -18,8 +18,10 @@ import (
 var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
-var jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
-var jobsMu sync.RWMutex
+var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
+var JobsMu sync.RWMutex
+
+var WorkerInstances int
 
 func AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
@@ -28,9 +30,9 @@ func AddJob(url string, contentType types.ContentType) *types.Job {
 		Status: types.StatusQueued,
 		Type:   contentType,
 	}
-	jobsMu.Lock()
-	jobs[job.ID] = job
-	jobsMu.Unlock()
+	JobsMu.Lock()
+	Jobs[job.ID] = job
+	JobsMu.Unlock()
 
 	// selection in case queue fulls
 	select {
@@ -45,19 +47,19 @@ func AddJob(url string, contentType types.ContentType) *types.Job {
 }
 
 func GetJob(id string) *types.Job {
-	jobsMu.RLock()
-	job := jobs[id]
-	jobsMu.RUnlock()
+	JobsMu.RLock()
+	job := Jobs[id]
+	JobsMu.RUnlock()
 	return job
 }
 
-func StartWorkers(n int) {
+func StartWorkers() {
 	// creating the downloads folder
 	if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
 		panic(err) // or handle properly
 	}
 
-	for i := 0; i < n; i++ {
+	for i := 0; i < WorkerInstances; i++ {
 		go worker()
 	}
 }

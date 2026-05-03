@@ -19,7 +19,10 @@ func main() {
 	// Creating the new Service Hanlder
 	serviceHandler := routes.ServiceHandler{}
 
-	router.HandleFunc("/audio", serviceHandler.HandleAudio)
+	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
+	router.HandleFunc("GET /jobs/active", serviceHandler.HandleActiveJobs)
+	router.HandleFunc("POST /instances/set", serviceHandler.HandleSetInstances)
+	router.HandleFunc("GET /instances/get", serviceHandler.HandleGetInstances)
 
 	server := http.Server{
 		Addr:        ":8080",
