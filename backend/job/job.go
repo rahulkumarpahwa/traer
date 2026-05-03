@@ -4,16 +4,22 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/rahulkumarpahwa/traer/types"
 	"github.com/rahulkumarpahwa/traer/utils"
 )
 
 var jobQueue = make(chan *types.Job, 100)
-var progressRegex = regexp.MustCompile(`(\d+\.\d+)%`)
+var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
+
+var jobs = make(map[string]*types.Job)
+var jobsMu sync.RWMutex
 
 func AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
@@ -22,12 +28,28 @@ func AddJob(url string, contentType types.ContentType) *types.Job {
 		Status: types.StatusQueued,
 		Type:   contentType,
 	}
+	jobsMu.Lock()
+	jobs[job.ID] = job
+	jobsMu.Unlock()
 
-	jobQueue <- job
+	// selection in case queue fulls 
+	select {
+	case jobQueue <- job:
+		// ok
+	default:
+		job.Status = types.StatusFailed
+		job.Error = "queue full"
+	}
+
 	return job
 }
 
 func StartWorkers(n int) {
+	// creating the downloads folder
+	if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
+		panic(err) // or handle properly
+	}
+
 	for i := 0; i < n; i++ {
 		go worker()
 	}
@@ -40,16 +62,41 @@ func worker() {
 }
 
 func processJob(job *types.Job) {
+	job.MU.Lock()
 	job.Status = types.StatusRunning
+	job.MU.Unlock()
 
 	cmd := buildCommand(job)
+	if cmd == nil {
+		job.MU.Lock()
+		job.Status = types.StatusFailed
+		job.Error = "invalid job type"
+		job.MU.Unlock()
+		return
+	}
 
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
-	if err := cmd.Start(); err != nil {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		job.MU.Lock()
 		job.Status = types.StatusFailed
 		job.Error = err.Error()
+		job.MU.Unlock()
+		return
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		job.MU.Lock()
+		job.Status = types.StatusFailed
+		job.Error = err.Error()
+		job.MU.Unlock()
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		job.MU.Lock()
+		job.Status = types.StatusFailed
+		job.Error = err.Error()
+		job.MU.Unlock()
 		return
 	}
 
@@ -57,15 +104,19 @@ func processJob(job *types.Job) {
 	go parseOutput(stdout, job)
 	go parseOutput(stderr, job)
 
-	err := cmd.Wait()
+	err = cmd.Wait()
 	if err != nil {
+		job.MU.Lock()
 		job.Status = types.StatusFailed
 		job.Error = err.Error()
+		job.MU.Unlock()
 		return
 	}
 
+	job.MU.Lock()
 	job.Progress = 100
 	job.Status = types.StatusDone
+	job.MU.Unlock()
 }
 
 func buildCommand(job *types.Job) *exec.Cmd {
@@ -106,6 +157,8 @@ func buildCommand(job *types.Job) *exec.Cmd {
 
 func parseOutput(pipe io.ReadCloser, job *types.Job) {
 	scanner := bufio.NewScanner(pipe)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -119,11 +172,16 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 				job.MU.Unlock()
 			}
 		}
+
+		if strings.Contains(line, "downloads/") || strings.Contains(line, "downloads\\") {
+			job.MU.Lock()
+			job.Output = strings.TrimSpace(line)
+			job.MU.Unlock()
+		}
 	}
 
-
-    if err := scanner.Err(); err != nil {
-        // handle or log the error
-        fmt.Println("Error reading output:", err)
-    }
+	if err := scanner.Err(); err != nil {
+		// handle or log the error
+		fmt.Println("Error reading output:", err)
+	}
 }
