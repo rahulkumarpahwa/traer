@@ -18,7 +18,7 @@ import (
 var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
-var jobs = make(map[string]*types.Job)
+var jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
 var jobsMu sync.RWMutex
 
 func AddJob(url string, contentType types.ContentType) *types.Job {
@@ -32,7 +32,7 @@ func AddJob(url string, contentType types.ContentType) *types.Job {
 	jobs[job.ID] = job
 	jobsMu.Unlock()
 
-	// selection in case queue fulls 
+	// selection in case queue fulls
 	select {
 	case jobQueue <- job:
 		// ok
@@ -168,7 +168,9 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 			progress, err := strconv.ParseFloat(match[1], 64)
 			if err == nil {
 				job.MU.Lock()
-				job.Progress = progress
+				if progress > job.Progress {
+					job.Progress = progress
+				}
 				job.MU.Unlock()
 			}
 		}
