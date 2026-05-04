@@ -1,5 +1,11 @@
 import { useStore } from "../store/useStore";
-import { CheckCircle2, Clock3, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileOutput,
+  Sparkles,
+} from "lucide-react";
 import Header from "./Header";
 import NotificationTray from "./NotificationTray";
 import Sidebar from "./Sidebar";
@@ -19,13 +25,13 @@ function JobPanelContent() {
             Active jobs
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-emerald-100/65">
-            Watch every workflow move from queue to completion, with progress, preset, and live status all in one view.
+            Watch every workflow move from queue to completion, with backend task status and output downloads in one place.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-emerald-500/12 bg-emerald-500/[0.05] p-4 dark:border-emerald-400/10 dark:bg-white/[0.03]">
             <Sparkles className="mb-3 h-5 w-5 text-emerald-600 dark:text-emerald-200" strokeWidth={1.8} />
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-700/55 dark:text-emerald-200/55">Total</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-emerald-700/55 dark:text-emerald-200/55">Tracked</p>
             <strong className="mt-2 block text-2xl text-slate-950 dark:text-emerald-50">{activeJobs.length}</strong>
           </div>
           <div className="rounded-2xl border border-emerald-500/12 bg-emerald-500/[0.05] p-4 dark:border-emerald-400/10 dark:bg-white/[0.03]">
@@ -47,61 +53,85 @@ function JobPanelContent() {
 
       {activeJobs.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-emerald-500/15 bg-white/50 p-5 text-sm leading-6 text-slate-500 dark:border-emerald-400/10 dark:bg-white/[0.02] dark:text-emerald-100/55">
-          No jobs yet. Start a transcript, conversion, or cloud sync.
+          No jobs yet. Start an audio or video task from the dashboard to queue it with the backend.
         </p>
       ) : (
         <div className="space-y-3">
-          {activeJobs.map((job) => (
-            <article
-              key={job.id}
-              className="rounded-3xl border border-emerald-500/12 bg-emerald-500/[0.05] p-5 transition hover:border-emerald-500/20 dark:border-emerald-400/10 dark:bg-white/[0.03]"
-            >
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex flex-1 items-start gap-4">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/12 bg-white/75 text-emerald-700 dark:border-emerald-400/10 dark:bg-white/[0.04] dark:text-emerald-200">
-                    {job.status === "done" ? (
-                      <CheckCircle2 className="h-5 w-5" strokeWidth={1.8} />
-                    ) : (
-                      <Clock3 className="h-5 w-5" strokeWidth={1.8} />
-                    )}
-                  </span>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-emerald-50">
-                      {job.title}
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-emerald-100/55">
-                      {job.message}
-                    </p>
-                  </div>
-                </div>
-                <StatusPill tone={job.status === "done" ? "strong" : "warm"}>
-                  {job.status}
-                </StatusPill>
-              </div>
+          {activeJobs.map((job) => {
+            const displayName = job.fileName || job.title;
+            const canDownload = job.status === "done" && Boolean(job.downloadUrl);
 
-              <div
-                className="mb-2 h-2 w-full overflow-hidden rounded-full bg-emerald-500/10 dark:bg-emerald-400/10"
-                aria-hidden="true"
+            return (
+              <article
+                key={job.id}
+                className="rounded-3xl border border-emerald-500/12 bg-emerald-500/[0.05] p-5 transition hover:border-emerald-500/20 dark:border-emerald-400/10 dark:bg-white/[0.03]"
               >
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500"
-                  style={{
-                    width: `${job.progress}%`,
-                    transition: "width 300ms ease",
-                  }}
-                />
-              </div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex flex-1 items-start gap-4">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/12 bg-white/75 text-emerald-700 dark:border-emerald-400/10 dark:bg-white/[0.04] dark:text-emerald-200">
+                      {job.status === "done" ? (
+                        <CheckCircle2 className="h-5 w-5" strokeWidth={1.8} />
+                      ) : (
+                        <Clock3 className="h-5 w-5" strokeWidth={1.8} />
+                      )}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="font-semibold text-slate-900 dark:text-emerald-50">
+                          {displayName}
+                        </h3>
+                        {canDownload ? (
+                          <a
+                            href={job.downloadUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-full border border-emerald-500/15 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 transition hover:border-emerald-500/30 hover:text-emerald-800 dark:border-emerald-400/15 dark:bg-white/[0.04] dark:text-emerald-200"
+                          >
+                            <Download className="h-3.5 w-3.5" strokeWidth={1.8} />
+                            Download
+                          </a>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-emerald-100/55">
+                        {job.message}
+                      </p>
+                      {job.fileName ? (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/12 bg-white/70 px-3 py-1 text-xs text-slate-600 dark:border-emerald-400/10 dark:bg-white/[0.04] dark:text-emerald-100/70">
+                          <FileOutput className="h-3.5 w-3.5" strokeWidth={1.8} />
+                          {job.fileName}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <StatusPill tone={job.status === "done" ? "strong" : "warm"}>
+                    {job.status}
+                  </StatusPill>
+                </div>
 
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-emerald-100/70">
-                  {job.option}
-                </span>
-                <span className="font-semibold text-slate-900 dark:text-emerald-50">
-                  {job.progress}%
-                </span>
-              </div>
-            </article>
-          ))}
+                <div
+                  className="mb-2 h-2 w-full overflow-hidden rounded-full bg-emerald-500/10 dark:bg-emerald-400/10"
+                  aria-hidden="true"
+                >
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, Number(job.progress ?? 0)))}%`,
+                      transition: "width 300ms ease",
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600 dark:text-emerald-100/70">
+                    {job.option}
+                  </span>
+                  <span className="font-semibold text-slate-900 dark:text-emerald-50">
+                    {Math.round(Number(job.progress ?? 0))}%
+                  </span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>

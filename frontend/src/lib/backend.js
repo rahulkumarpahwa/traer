@@ -1,11 +1,13 @@
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const BACKEND_BASE_URL =
+  import.meta.env.DEV ? "/api" : "http://localhost:8080";
+
 function getWailsApp() {
   return globalThis?.go?.main?.App ?? null;
 }
 
-function makeMockJob(payload) {
-  const now = new Date();
+function labelForKind(kind) {
   const labelMap = {
     transcribe: "Transcript",
     audio: "Audio package",
@@ -13,18 +15,86 @@ function makeMockJob(payload) {
     cloud: "Cloud sync",
   };
 
+  return labelMap[kind] ?? "Workflow";
+}
+
+function fileNameFromOutput(output) {
+  if (!output) return "";
+  return output.split(/[\\/]/).pop() ?? "";
+}
+
+function buildDownloadUrl(id) {
+  if (!id) return "";
+  const encodedId = encodeURIComponent(id);
+  return `${BACKEND_BASE_URL}/jobs/download?id=${encodedId}`;
+}
+
+async function backendFetch(path, options = {}) {
+  const response = await fetch(`${BACKEND_BASE_URL}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers ?? {}),
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const payload = await response.json();
+      message = payload.error ?? payload.message ?? message;
+    } catch {
+      // Ignore JSON parse errors and use the fallback message.
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+function mapBackendJob(job, fallbackOption = "") {
+  const kind = job.type ?? job.kind ?? "";
+  const fileName = fileNameFromOutput(job.output);
+  const title = fileName || labelForKind(kind);
+  const message = job.error
+    ? job.error
+    : fileName
+      ? `Output file ready: ${fileName}`
+      : `${labelForKind(kind)} task is ${job.status}.`;
+
+  return {
+    id: job.id,
+    kind,
+    option: fallbackOption || String(kind || "").toUpperCase(),
+    title,
+    message,
+    status: job.status,
+    progress: Number(job.progress ?? 0),
+    output: job.output ?? "",
+    fileName,
+    downloadUrl: buildDownloadUrl(job.id),
+    sourceUrl: job.url ?? "",
+    createdAt: job.createdAt ?? new Date().toISOString(),
+    source: "backend",
+  };
+}
+
+function makeMockJob(payload) {
+  const now = new Date();
   return {
     id: `${payload.kind}-${now.getTime()}`,
     kind: payload.kind,
     option: payload.option,
-    title: `${labelMap[payload.kind] ?? "Workflow"} queued`,
-    message: `${labelMap[payload.kind] ?? "Workflow"} for ${payload.url} started with ${payload.option}.`,
+    title: `${labelForKind(payload.kind)} queued`,
+    message: `${labelForKind(payload.kind)} for ${payload.url} started with ${payload.option}.`,
     createdAt: now.toISOString(),
     logs: [
       `[${now.toLocaleTimeString()}] traer accepted ${payload.kind} request`,
       `[${new Date(now.getTime() + 800).toLocaleTimeString()}] source resolved: ${payload.url}`,
       `[${new Date(now.getTime() + 1600).toLocaleTimeString()}] preset selected: ${payload.option}`,
     ],
+    sourceUrl: payload.url,
+    source: "mock",
   };
 }
 
@@ -110,6 +180,59 @@ export async function startJob(payload) {
     return api.StartJob(payload);
   }
 
+  if (payload.kind === "audio" || payload.kind === "video") {
+    const job = await backendFetch("/jobs/create", {
+      method: "POST",
+      body: JSON.stringify({
+        url: payload.url,
+        type: payload.kind,
+      }),
+    });
+
+    const now = new Date();
+    return {
+      ...mapBackendJob(job, payload.option),
+      title: `${labelForKind(payload.kind)} queued`,
+      message: `${labelForKind(payload.kind)} for ${payload.url} is now queued.`,
+      option: payload.option,
+      createdAt: now.toISOString(),
+      logs: [
+        `[${now.toLocaleTimeString()}] backend accepted ${payload.kind} request`,
+        `[${new Date(now.getTime() + 800).toLocaleTimeString()}] source queued: ${payload.url}`,
+        `[${new Date(now.getTime() + 1600).toLocaleTimeString()}] preset selected: ${payload.option}`,
+      ],
+    };
+  }
+
   await wait(260);
   return makeMockJob(payload);
+}
+
+export async function getActiveJobs() {
+  const api = getWailsApp();
+  if (api?.GetActiveJobs) {
+    return api.GetActiveJobs();
+  }
+
+  const jobs = await backendFetch("/jobs/active");
+  return jobs.map((job) => mapBackendJob(job));
+}
+
+export async function getJobStatus(id) {
+  const api = getWailsApp();
+  if (api?.GetJobStatus) {
+    return api.GetJobStatus(id);
+  }
+
+  const job = await backendFetch(`/jobs/status?id=${encodeURIComponent(id)}`);
+  return mapBackendJob(job);
+}
+
+export async function getDownloadUrl(id) {
+  const api = getWailsApp();
+  if (api?.GetDownloadURL) {
+    return api.GetDownloadURL(id);
+  }
+
+  return buildDownloadUrl(id);
 }

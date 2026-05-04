@@ -1,11 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+const backendBaseURL = "http://localhost:8080"
 
 type App struct {
 	ctx      context.Context
@@ -56,13 +63,29 @@ type StartJobPayload struct {
 }
 
 type JobResponse struct {
-	ID        string   `json:"id"`
-	Kind      string   `json:"kind"`
-	Option    string   `json:"option"`
-	Title     string   `json:"title"`
-	Message   string   `json:"message"`
-	Logs      []string `json:"logs"`
-	CreatedAt string   `json:"createdAt"`
+	ID          string   `json:"id"`
+	Kind        string   `json:"kind"`
+	Option      string   `json:"option"`
+	Title       string   `json:"title"`
+	Message     string   `json:"message"`
+	Logs        []string `json:"logs"`
+	CreatedAt   string   `json:"createdAt"`
+	Status      string   `json:"status,omitempty"`
+	Progress    float64  `json:"progress,omitempty"`
+	Output      string   `json:"output,omitempty"`
+	FileName    string   `json:"fileName,omitempty"`
+	DownloadURL string   `json:"downloadUrl,omitempty"`
+	SourceURL   string   `json:"sourceUrl,omitempty"`
+}
+
+type backendJob struct {
+	ID       string  `json:"id"`
+	URL      string  `json:"url"`
+	Type     string  `json:"type"`
+	Status   string  `json:"status"`
+	Progress float64 `json:"progress"`
+	Output   string  `json:"output"`
+	Error    string  `json:"error"`
 }
 
 func NewApp() *App {
@@ -101,7 +124,7 @@ func (a *App) GetInitialState() AppState {
 		},
 		Capabilities: map[string]bool{
 			"backendBound": a.ctx != nil,
-			"mockMode":     true,
+			"mockMode":     false,
 		},
 	}
 }
@@ -130,16 +153,77 @@ func (a *App) GetProfile() Profile {
 }
 
 func (a *App) StartJob(payload StartJobPayload) JobResponse {
-	now := time.Now()
-	actionLabel := map[string]string{
-		"transcribe": "Transcript",
-		"audio":      "Audio package",
-		"video":      "Video export",
-		"cloud":      "Cloud sync",
-	}[payload.Kind]
-	if actionLabel == "" {
-		actionLabel = "Workflow"
+	if payload.Kind != "audio" && payload.Kind != "video" {
+		return a.makeMockJob(payload)
 	}
+
+	reqBody, _ := json.Marshal(map[string]string{
+		"url":  payload.URL,
+		"type": payload.Kind,
+	})
+
+	var created backendJob
+	if err := doBackendJSON(http.MethodPost, "/jobs/create", bytes.NewReader(reqBody), &created); err != nil {
+		return a.makeErrorJob(payload, err)
+	}
+
+	now := time.Now()
+	return JobResponse{
+		ID:          created.ID,
+		Kind:        payload.Kind,
+		Option:      payload.Option,
+		Title:       labelForKind(payload.Kind) + " queued",
+		Message:     fmt.Sprintf("%s for %s is now queued.", labelForKind(payload.Kind), payload.URL),
+		CreatedAt:   now.Format(time.RFC3339),
+		Status:      created.Status,
+		Progress:    created.Progress,
+		Output:      created.Output,
+		FileName:    fileNameFromOutput(created.Output),
+		DownloadURL: buildDownloadURL(created.ID),
+		SourceURL:   payload.URL,
+		Logs: []string{
+			fmt.Sprintf("[%s] backend accepted %s request", now.Format("15:04:05"), payload.Kind),
+			fmt.Sprintf("[%s] source queued: %s", now.Add(1*time.Second).Format("15:04:05"), payload.URL),
+			fmt.Sprintf("[%s] preset selected: %s", now.Add(2*time.Second).Format("15:04:05"), payload.Option),
+		},
+	}
+}
+
+func (a *App) GetActiveJobs() []JobResponse {
+	var jobs []backendJob
+	if err := doBackendJSON(http.MethodGet, "/jobs/active", nil, &jobs); err != nil {
+		return []JobResponse{}
+	}
+
+	active := make([]JobResponse, 0, len(jobs))
+	for _, job := range jobs {
+		active = append(active, mapBackendJob(job))
+	}
+
+	return active
+}
+
+func (a *App) GetJobStatus(id string) JobResponse {
+	escapedID := url.QueryEscape(strings.TrimSpace(id))
+	var job backendJob
+	if err := doBackendJSON(http.MethodGet, "/jobs/status?id="+escapedID, nil, &job); err != nil {
+		return JobResponse{
+			ID:      id,
+			Status:  "failed",
+			Message: err.Error(),
+		}
+	}
+
+	return mapBackendJob(job)
+}
+
+func (a *App) GetDownloadURL(id string) string {
+	return buildDownloadURL(id)
+}
+
+func (a *App) makeMockJob(payload StartJobPayload) JobResponse {
+	now := time.Now()
+	actionLabel := labelForKind(payload.Kind)
 
 	return JobResponse{
 		ID:        fmt.Sprintf("%s-%d", payload.Kind, now.UnixMilli()),
@@ -148,10 +232,122 @@ func (a *App) StartJob(payload StartJobPayload) JobResponse {
 		Title:     fmt.Sprintf("%s queued", actionLabel),
 		Message:   fmt.Sprintf("%s for %s is now processing with preset %s.", actionLabel, payload.URL, payload.Option),
 		CreatedAt: now.Format(time.RFC3339),
+		SourceURL: payload.URL,
 		Logs: []string{
 			fmt.Sprintf("[%s] traer accepted %s request", now.Format("15:04:05"), payload.Kind),
 			fmt.Sprintf("[%s] source resolved: %s", now.Add(1*time.Second).Format("15:04:05"), payload.URL),
 			fmt.Sprintf("[%s] preset selected: %s", now.Add(2*time.Second).Format("15:04:05"), payload.Option),
 		},
 	}
+}
+
+func (a *App) makeErrorJob(payload StartJobPayload, err error) JobResponse {
+	now := time.Now()
+	return JobResponse{
+		ID:        fmt.Sprintf("%s-%d", payload.Kind, now.UnixMilli()),
+		Kind:      payload.Kind,
+		Option:    payload.Option,
+		Title:     fmt.Sprintf("%s failed", labelForKind(payload.Kind)),
+		Message:   err.Error(),
+		CreatedAt: now.Format(time.RFC3339),
+		Status:    "failed",
+		SourceURL: payload.URL,
+	}
+}
+
+func labelForKind(kind string) string {
+	switch kind {
+	case "audio":
+		return "Audio package"
+	case "video":
+		return "Video export"
+	case "transcribe":
+		return "Transcript"
+	case "cloud":
+		return "Cloud sync"
+	default:
+		return "Workflow"
+	}
+}
+
+func doBackendJSON(method, path string, body *bytes.Reader, out interface{}) error {
+	var reqBody *bytes.Reader
+	if body == nil {
+		reqBody = bytes.NewReader(nil)
+	} else {
+		reqBody = body
+	}
+
+	req, err := http.NewRequest(method, backendBaseURL+path, reqBody)
+	if err != nil {
+		return err
+	}
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		var payload map[string]interface{}
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr == nil {
+			if message, ok := payload["error"].(string); ok && message != "" {
+				return fmt.Errorf(message)
+			}
+			if message, ok := payload["message"].(string); ok && message != "" {
+				return fmt.Errorf(message)
+			}
+		}
+		return fmt.Errorf("backend request failed with status %d", resp.StatusCode)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func mapBackendJob(job backendJob) JobResponse {
+	fileName := fileNameFromOutput(job.Output)
+	title := labelForKind(job.Type)
+	if fileName != "" {
+		title = fileName
+	}
+
+	message := fmt.Sprintf("%s task is %s.", labelForKind(job.Type), job.Status)
+	if job.Error != "" {
+		message = job.Error
+	} else if fileName != "" {
+		message = fmt.Sprintf("Output file ready: %s", fileName)
+	}
+
+	return JobResponse{
+		ID:          job.ID,
+		Kind:        job.Type,
+		Option:      strings.ToUpper(job.Type),
+		Title:       title,
+		Message:     message,
+		Status:      job.Status,
+		Progress:    job.Progress,
+		Output:      job.Output,
+		FileName:    fileName,
+		DownloadURL: buildDownloadURL(job.ID),
+		SourceURL:   job.URL,
+	}
+}
+
+func fileNameFromOutput(output string) string {
+	if strings.TrimSpace(output) == "" {
+		return ""
+	}
+	return filepath.Base(strings.TrimSpace(output))
+}
+
+func buildDownloadURL(id string) string {
+	if strings.TrimSpace(id) == "" {
+		return ""
+	}
+	return backendBaseURL + "/jobs/download?id=" + url.QueryEscape(strings.TrimSpace(id))
 }

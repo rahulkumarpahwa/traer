@@ -1,6 +1,15 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { getInitialState, getProfile, login, saveSettings, startJob } from "../lib/backend";
+import {
+  getActiveJobs,
+  getDownloadUrl,
+  getInitialState,
+  getJobStatus,
+  getProfile,
+  login,
+  saveSettings,
+  startJob,
+} from "../lib/backend";
 
 const actionOptions = {
   transcribe: ["Markdown", "MDX", "TXT", "JSON"],
@@ -16,6 +25,26 @@ const initialSettings = {
   outputDir: "",
   theme: "midnight",
 };
+
+function mergeJobs(existingJobs, incomingJobs) {
+  const byId = new Map(existingJobs.map((job) => [job.id, job]));
+
+  incomingJobs.forEach((job) => {
+    const previous = byId.get(job.id) ?? {};
+    byId.set(job.id, {
+      ...previous,
+      ...job,
+      option: job.option || previous.option || String(job.kind || "").toUpperCase(),
+      title: job.title || previous.title,
+      message: job.message || previous.message,
+      createdAt: previous.createdAt || job.createdAt || new Date().toISOString(),
+    });
+  });
+
+  return Array.from(byId.values()).sort(
+    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+  );
+}
 
 export const useStore = create((set, get) => ({
   appName: "traer",
@@ -54,9 +83,13 @@ export const useStore = create((set, get) => ({
       },
       terminalLines: [
         "[system] traer ready",
-        data.capabilities?.backendBound ? "[bridge] wails backend detected" : "[bridge] running in mock preview mode",
+        data.capabilities?.backendBound
+          ? "[bridge] wails backend detected"
+          : "[bridge] running in mock preview mode",
       ],
     });
+
+    await get().refreshActiveJobs();
   },
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   addNotification: (notification) =>
@@ -116,6 +149,40 @@ export const useStore = create((set, get) => ({
     set({ profile });
     return profile;
   },
+  refreshActiveJobs: async () => {
+    try {
+      const remoteActiveJobs = await getActiveJobs();
+      const trackedJobs = get().activeJobs.filter((job) => job.source === "backend");
+      const trackedStatuses = await Promise.all(
+        trackedJobs.map(async (job) => {
+          try {
+            const status = await getJobStatus(job.id);
+            return {
+              ...status,
+              option: job.option,
+              createdAt: job.createdAt,
+              source: "backend",
+              downloadUrl:
+                status.downloadUrl || (status.status === "done" ? await getDownloadUrl(job.id) : ""),
+            };
+          } catch {
+            return job;
+          }
+        }),
+      );
+
+      const normalizedRemote = remoteActiveJobs.map((job) => ({
+        ...job,
+        source: "backend",
+      }));
+
+      set((state) => ({
+        activeJobs: mergeJobs(state.activeJobs, [...normalizedRemote, ...trackedStatuses]).slice(0, 12),
+      }));
+    } catch {
+      // Ignore polling errors so the UI can keep rendering existing jobs.
+    }
+  },
   runJob: async ({ kind, url }) => {
     const option = get().selectedOptions[kind];
     const cleanUrl = url.trim();
@@ -138,7 +205,7 @@ export const useStore = create((set, get) => ({
       url: cleanUrl,
     });
 
-    response.logs.forEach((line) => get().addTerminalLine(line));
+    response.logs?.forEach((line) => get().addTerminalLine(line));
 
     const job = {
       id: response.id,
@@ -146,13 +213,18 @@ export const useStore = create((set, get) => ({
       option: response.option,
       title: response.title,
       message: response.message,
-      progress: 8,
-      status: "running",
+      progress: Number(response.progress ?? 8),
+      status: response.status ?? "running",
+      output: response.output ?? "",
+      fileName: response.fileName ?? "",
+      downloadUrl: response.downloadUrl ?? "",
+      sourceUrl: response.sourceUrl ?? cleanUrl,
       createdAt: response.createdAt,
+      source: response.kind === "audio" || response.kind === "video" ? "backend" : "mock",
     };
 
     set((state) => ({
-      activeJobs: [job, ...state.activeJobs].slice(0, 6),
+      activeJobs: mergeJobs(state.activeJobs, [job]).slice(0, 12),
     }));
 
     get().addNotification({
@@ -160,6 +232,11 @@ export const useStore = create((set, get) => ({
       title: response.title,
       message: response.message,
     });
+
+    if (job.source === "backend") {
+      await get().refreshActiveJobs();
+      return;
+    }
 
     const progressMarks = [24, 47, 71, 92, 100];
     progressMarks.forEach((value, index) => {
@@ -198,10 +275,21 @@ export const useStore = create((set, get) => ({
 export function useHydrateApp() {
   const hydrated = useStore((state) => state.hydrated);
   const initialize = useStore((state) => state.initialize);
+  const refreshActiveJobs = useStore((state) => state.refreshActiveJobs);
 
   useEffect(() => {
     if (!hydrated) {
       initialize();
     }
   }, [hydrated, initialize]);
+
+  useEffect(() => {
+    if (!hydrated) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      refreshActiveJobs();
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [hydrated, refreshActiveJobs]);
 }
