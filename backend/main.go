@@ -10,28 +10,28 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/job"
 	"github.com/rahulkumarpahwa/traer/routes"
 )
 
 func main() {
 
+	// setting up the configurations
+	config := config.Config{}
+
+	newConfig, err := config.MustExecute()
+
 	router := http.NewServeMux()
 
 	// Creating the job worker
-	jobworker := job.JobWorker{}
-	missingDependencies := job.CheckDependencies()
-	if len(missingDependencies) > 0 {
-		log.Printf("startup dependency check failed: missing %v", missingDependencies)
-	} else {
-		log.Println("startup dependency check passed")
-	}
+	jobworker := job.JobWorker{Config: newConfig}
 
 	// starting the worker
 	jobworker.StartWorkers()
 
 	// Creating the new Service Hanlder
-	serviceHandler := routes.ServiceHandler{JW: &jobworker, MissingDependencies: missingDependencies}
+	serviceHandler := routes.ServiceHandler{JW: &jobworker}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
@@ -64,7 +64,7 @@ func main() {
 	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancelCtx()
 
-	err := server.Shutdown(ctx)
+	err = server.Shutdown(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

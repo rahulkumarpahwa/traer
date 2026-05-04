@@ -15,15 +15,9 @@ import (
 
 type ServiceHandler struct {
 	JW                  *job.JobWorker
-	MissingDependencies []string
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {
-	if len(hs.MissingDependencies) > 0 {
-		utils.ErrorResponse(w, http.StatusServiceUnavailable, fmt.Errorf("missing dependencies: %s", strings.Join(hs.MissingDependencies, ", ")))
-		return
-	}
-
 	type Request struct {
 		URL  string `json:"url"`
 		Type string `json:"type"` // "audio" or "video"

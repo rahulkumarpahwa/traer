@@ -12,74 +12,23 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/types"
 	"github.com/rahulkumarpahwa/traer/utils"
 )
 
 type JobWorker struct {
 	startOnce sync.Once
+	Config    *config.Config
 }
 
 var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
-var requiredExecutables = []string{"yt-dlp", "ffmpeg"}
 
 var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
 var JobsMu sync.RWMutex
 
 var WorkerInstances int = 2
-
-func resolveToolPath(toolName string) (string, error) {
-	if path, err := exec.LookPath(toolName); err == nil {
-		return path, nil
-	}
-
-	localAppData := os.Getenv("LOCALAPPDATA")
-	var patterns []string
-
-	switch toolName {
-	case "yt-dlp":
-		patterns = []string{
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Links", "yt-dlp.exe"),
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Packages", "yt-dlp.yt-dlp_*", "yt-dlp.exe"),
-		}
-	case "ffmpeg":
-		patterns = []string{
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_*", "*", "bin", "ffmpeg.exe"),
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Packages", "yt-dlp.FFmpeg_*", "*", "bin", "ffmpeg.exe"),
-		}
-	default:
-		return "", fmt.Errorf("unsupported tool: %s", toolName)
-	}
-
-	for _, pattern := range patterns {
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			continue
-		}
-
-		for _, match := range matches {
-			if info, err := os.Stat(match); err == nil && !info.IsDir() {
-				return match, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("%s not found", toolName)
-}
-
-func CheckDependencies() []string {
-	var missing []string
-
-	for _, executable := range requiredExecutables {
-		if _, err := resolveToolPath(executable); err != nil {
-			missing = append(missing, executable)
-		}
-	}
-
-	return missing
-}
 
 func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
@@ -118,23 +67,23 @@ func (jw *JobWorker) StartWorkers() {
 		}
 
 		for i := 0; i < WorkerInstances; i++ {
-			go worker()
+			go jw.worker()
 		}
 	})
 }
 
-func worker() {
+func (jw * JobWorker) worker() {
 	for job := range jobQueue {
-		processJob(job)
+		jw.processJob(job)
 	}
 }
 
-func processJob(job *types.Job) {
+func (jw *JobWorker) processJob(job *types.Job) {
 	job.MU.Lock()
 	job.Status = types.StatusRunning
 	job.MU.Unlock()
 
-	cmd := buildCommand(job)
+	cmd := jw.buildCommand(job)
 	if cmd == nil {
 		job.MU.Lock()
 		job.Status = types.StatusFailed
@@ -187,7 +136,7 @@ func processJob(job *types.Job) {
 	job.MU.Unlock()
 }
 
-func buildCommand(job *types.Job) *exec.Cmd {
+func (jw * JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 	baseArgs := []string{
 		"--newline",
 		"--progress",
@@ -195,13 +144,13 @@ func buildCommand(job *types.Job) *exec.Cmd {
 		"-o", "downloads/%(title)s.%(ext)s",
 	}
 
-	ytDlpPath, err := resolveToolPath("yt-dlp")
-	if err != nil {
+	ytDlpPath := jw.Config.RequiredExecutables["yt-dlp"]
+	if ytDlpPath == "" {
 		return nil
 	}
 
-	ffmpegPath, err := resolveToolPath("ffmpeg")
-	if err != nil {
+	ffmpegPath := jw.Config.RequiredExecutables["ffmpeg"]
+	if ffmpegPath == "" {
 		return nil
 	}
 
