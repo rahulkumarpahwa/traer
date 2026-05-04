@@ -1,3 +1,5 @@
+package validators
+
 import "regexp"
 
 var ytRegex = regexp.MustCompile(`^(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+$`)

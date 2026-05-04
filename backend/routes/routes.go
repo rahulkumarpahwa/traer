@@ -10,6 +10,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/job"
 	"github.com/rahulkumarpahwa/traer/types"
 	"github.com/rahulkumarpahwa/traer/utils"
+	"github.com/rahulkumarpahwa/traer/validators"
 )
 
 type ServiceHandler struct {
@@ -36,6 +37,11 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 
 	if req.URL == "" {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("url is required"))
+		return
+	}
+
+	if !validators.IsYouTubeURL(req.URL){
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("Invalid URL"))
 		return
 	}
 
