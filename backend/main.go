@@ -21,6 +21,9 @@ func main() {
 	config := config.Config{}
 
 	newConfig, err := config.MustExecute()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	router := http.NewServeMux()
 

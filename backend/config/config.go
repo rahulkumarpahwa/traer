@@ -16,6 +16,10 @@ type Config struct {
 func (c *Config) MustExecute() (*Config, error) {
 	var missing []string
 
+	if c.RequiredExecutables == nil {
+		c.RequiredExecutables = make(map[string]string)
+	}
+
 	for _, executable := range requiredExecutables {
 		if path, err := resolveToolPath(executable); err != nil {
 			missing = append(missing, executable)
@@ -28,7 +32,7 @@ func (c *Config) MustExecute() (*Config, error) {
 		return nil, fmt.Errorf("startup dependency check failed: missing %v", missing)
 	}
 
-	return &Config{RequiredExecutables: c.RequiredExecutables}, nil
+	return c, nil
 }
 
 func resolveToolPath(toolName string) (string, error) {
