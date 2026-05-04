@@ -72,7 +72,7 @@ func (jw *JobWorker) StartWorkers() {
 	})
 }
 
-func (jw * JobWorker) worker() {
+func (jw *JobWorker) worker() {
 	for job := range jobQueue {
 		jw.processJob(job)
 	}
@@ -136,7 +136,7 @@ func (jw *JobWorker) processJob(job *types.Job) {
 	job.MU.Unlock()
 }
 
-func (jw * JobWorker) buildCommand(job *types.Job) *exec.Cmd {
+func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 	baseArgs := []string{
 		"--newline",
 		"--progress",
@@ -172,8 +172,9 @@ func (jw * JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 
 	if job.Type == types.VideoContent {
 		args := append([]string{
-			"-f", "bv*+ba/b",
+			"-f", "bestvideo+bestaudio/best",
 			"--merge-output-format", "mp4",
+			"--recode-video", "mp4", // optional but safer
 			"--ffmpeg-location", ffmpegLocation,
 			"--embed-thumbnail",
 			"--add-metadata",
