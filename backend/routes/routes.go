@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/rahulkumarpahwa/traer/job"
@@ -65,32 +66,71 @@ func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Reques
 	utils.JSONResponse(w, http.StatusOK, activeJobs)
 }
 
-func (hs *ServiceHandler) HandleSetInstances(w http.ResponseWriter, r *http.Request) {
-	type Request struct {
-		Count int `json:"count"`
-	}
-
-	var req Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, err)
-		return
-	}
-
-	if req.Count <= 0 {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("count must be > 0"))
-		return
-	}
-
-	job.WorkerInstances = req.Count
-
-	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message":   "instances updated",
-		"instances": job.WorkerInstances,
-	})
-}
-
 func (hs *ServiceHandler) HandleGetInstances(w http.ResponseWriter, r *http.Request) {
 	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
 		"instances": job.WorkerInstances,
 	})
+}
+
+func (hs *ServiceHandler) HandleJobStatus(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+
+	if id == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
+		return
+	}
+
+	j := job.GetJob(id)
+	if j == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
+		return
+	}
+
+	j.MU.Lock()
+	response := map[string]interface{}{
+		"id":       j.ID,
+		"url":      j.URL,
+		"type":     j.Type,
+		"status":   j.Status,
+		"progress": j.Progress,
+		"output":   j.Output,
+		"error":    j.Error,
+	}
+	j.MU.Unlock()
+
+	utils.JSONResponse(w, http.StatusOK, response)
+}
+
+func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+
+	if id == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
+		return
+	}
+
+	j := job.GetJob(id)
+	if j == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
+		return
+	}
+
+	j.MU.Lock()
+	defer j.MU.Unlock()
+
+	if j.Status != types.StatusDone {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
+		return
+	}
+
+	if j.Output == "" {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("output path missing"))
+		return
+	}
+
+	// Serve file
+	w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(j.Output))
+	w.Header().Set("Content-Type", "application/octet-stream")
+
+	http.ServeFile(w, r, j.Output)
 }

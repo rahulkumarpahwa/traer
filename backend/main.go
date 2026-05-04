@@ -21,13 +21,17 @@ func main() {
 	// Creating the job worker
 	jobworker := job.JobWorker{}
 
+	// starting the worker
+	jobworker.StartWorkers()
+
 	// Creating the new Service Hanlder
 	serviceHandler := routes.ServiceHandler{JW: &jobworker}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
 	router.HandleFunc("GET /jobs/active", serviceHandler.HandleActiveJobs)
-	router.HandleFunc("POST /instances/set", serviceHandler.HandleSetInstances)
+	router.HandleFunc("GET /jobs/status", serviceHandler.HandleJobStatus)
+	router.HandleFunc("GET /jobs/download", serviceHandler.HandleDownload)
 	router.HandleFunc("GET /instances/get", serviceHandler.HandleGetInstances)
 
 	server := http.Server{
