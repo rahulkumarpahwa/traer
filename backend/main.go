@@ -18,9 +18,9 @@ import (
 func main() {
 
 	// setting up the configurations
-	config := config.Config{}
+	config := &config.Config{}
 
-	newConfig, err := config.MustExecute()
+	_, err := config.MustExecute()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func main() {
 	router := http.NewServeMux()
 
 	// Creating the job worker
-	jobworker := job.JobWorker{Config: newConfig}
+	jobworker := job.JobWorker{Config: config}
 
 	// starting the worker
 	jobworker.StartWorkers()
