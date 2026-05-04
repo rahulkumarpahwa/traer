@@ -20,12 +20,18 @@ func main() {
 
 	// Creating the job worker
 	jobworker := job.JobWorker{}
+	missingDependencies := job.CheckDependencies()
+	if len(missingDependencies) > 0 {
+		log.Printf("startup dependency check failed: missing %v", missingDependencies)
+	} else {
+		log.Println("startup dependency check passed")
+	}
 
 	// starting the worker
 	jobworker.StartWorkers()
 
 	// Creating the new Service Hanlder
-	serviceHandler := routes.ServiceHandler{JW: &jobworker}
+	serviceHandler := routes.ServiceHandler{JW: &jobworker, MissingDependencies: missingDependencies}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
