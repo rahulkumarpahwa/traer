@@ -172,9 +172,9 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 
 	if job.Type == types.VideoContent {
 		args := append([]string{
-			"-f", "bestvideo+bestaudio/best",
+			"-f", "bv*+ba/best",
 			"--merge-output-format", "mp4",
-			"--recode-video", "mp4", // optional but safer
+			"--remux-video", "mp4",
 			"--ffmpeg-location", ffmpegLocation,
 			"--embed-thumbnail",
 			"--add-metadata",
