@@ -117,9 +117,16 @@ func (jw *JobWorker) processJob(job *types.Job) {
 		return
 	}
 
-	// Read both stdout & stderr
-	go parseOutput(stdout, job)
-	go parseOutput(stderr, job)
+	var outputWg sync.WaitGroup
+	outputWg.Add(2)
+	go func() {
+		defer outputWg.Done()
+		parseOutput(stdout, job)
+	}()
+	go func() {
+		defer outputWg.Done()
+		parseOutput(stderr, job)
+	}()
 
 	err = cmd.Wait()
 	if err != nil {
@@ -130,7 +137,9 @@ func (jw *JobWorker) processJob(job *types.Job) {
 		return
 	}
 
-	if resolvedPath, err := resolveOutputPath(job.Output); err == nil && resolvedPath != "" {
+	outputWg.Wait()
+
+	if resolvedPath, err := ResolveOutputPath(job.Output); err == nil && resolvedPath != "" {
 		job.MU.Lock()
 		job.Output = resolvedPath
 		job.MU.Unlock()
@@ -241,7 +250,7 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 	}
 }
 
-func resolveOutputPath(outputPath string) (string, error) {
+func ResolveOutputPath(outputPath string) (string, error) {
 	if outputPath == "" {
 		return "", nil
 	}

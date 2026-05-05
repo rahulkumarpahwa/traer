@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,7 +15,7 @@ import (
 )
 
 type ServiceHandler struct {
-	JW                  *job.JobWorker
+	JW *job.JobWorker
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +35,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if !validators.IsYouTubeURL(req.URL){
+	if !validators.IsYouTubeURL(req.URL) {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("Invalid URL"))
 		return
 	}
@@ -131,23 +132,39 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 	}
 
 	j.MU.Lock()
-	defer j.MU.Unlock()
+	status := j.Status
+	outputPath := j.Output
+	j.MU.Unlock()
 
-	fmt.Printf("[download] Job found: status=%s, output=%s\n", j.Status, j.Output)
+	fmt.Printf("[download] Job found: status=%s, output=%s\n", status, outputPath)
 
-	if j.Status != types.StatusDone {
+	if status != types.StatusDone {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
 		return
 	}
 
-	if j.Output == "" {
+	if outputPath == "" {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("output path missing"))
 		return
 	}
 
+	resolvedPath, err := job.ResolveOutputPath(outputPath)
+	if err == nil && resolvedPath != "" {
+		outputPath = resolvedPath
+		j.MU.Lock()
+		j.Output = resolvedPath
+		j.MU.Unlock()
+	}
+
+	if _, err := os.Stat(outputPath); err != nil {
+		fmt.Printf("[download] File stat error: %v\n", err)
+		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("file not found: %v", err))
+		return
+	}
+
 	// Serve file
-	w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(j.Output))
+	w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(outputPath))
 	w.Header().Set("Content-Type", "application/octet-stream")
 
-	http.ServeFile(w, r, j.Output)
+	http.ServeFile(w, r, outputPath)
 }
