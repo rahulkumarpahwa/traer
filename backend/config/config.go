@@ -1,76 +1,61 @@
 package config
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"github.com/rahulkumarpahwa/traer/bootstrap"
 )
 
-var requiredExecutables = []string{"yt-dlp", "ffmpeg"}
-
 type Config struct {
-	RequiredExecutables map[string]string
+	App struct {
+		Name string `yaml:"name" env:"APP_NAME" env-default:"traer-backend"`
+		Env  string `yaml:"env" env:"APP_ENV" env-default:"development"`
+	} `yaml:"app"`
+
+	HTTPServer struct {
+		Address         string `yaml:"address" env:"HTTP_ADDRESS" env-default:"localhost:8080"`
+		ReadTimeout     string `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20s"`
+		WriteTimeout    string `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20s"`
+		ShutdownTimeout string `yaml:"shutdown_timeout" env:"HTTP_SHUTDOWN_TIMEOUT" env-default:"5s"`
+	} `yaml:"http_server"`
+
+	Workers struct {
+		Instances int `yaml:"instances" env:"WORKER_INSTANCES" env-default:"2"`
+		QueueSize int `yaml:"queue_size" env:"QUEUE_SIZE" env-default:"100"`
+	} `yaml:"workers"`
+
+	Jobs struct {
+		MaxDuration     string `yaml:"max_duration" env:"JOB_MAX_DURATION" env-default:"30m"`
+		CleanupInterval string `yaml:"cleanup_interval" env:"JOB_CLEANUP_INTERVAL" env-default:"10m"`
+		RetentionTime   string `yaml:"retention_time" env:"JOB_RETENTION_TIME" env-default:"1h"`
+	} `yaml:"jobs"`
+
+	Storage struct {
+		DownloadPath string `yaml:"download_path" env:"DOWNLOAD_PATH" env-default:"downloads/"`
+		MaxFileSize  int    `yaml:"max_file_size_mb" env:"MAX_FILE_SIZE_MB" env-default:"1024"`
+		AutoCleanup  bool   `yaml:"auto_cleanup" env:"AUTO_CLEANUP" env-default:"true"`
+	} `yaml:"storage"`
+
+	Executables struct {
+		Required []string `yaml:"required"`
+	} `yaml:"executables"`
+
+	Database struct {
+		Path string `yaml:"path" env:"DB_PATH" env-default:"database/database.db"`
+	} `yaml:"database"`
+
+	Logging struct {
+		Level  string `yaml:"level" env:"LOG_LEVEL" env-default:"info"`
+		Format string `yaml:"format" env:"LOG_FORMAT" env-default:"text"`
+	} `yaml:"logging"`
 }
 
-func (c *Config) MustExecute() (*Config, error) {
-	var missing []string
+// ResolveExecutables resolves all required executables and returns a map of tool names to paths.
+// It uses the DependencyManager to find tools in the system PATH and known install locations.
+func (c *Config) ResolveExecutables() (map[string]string, error) {
+	depManager := bootstrap.NewDependencyManager()
 
-	if c.RequiredExecutables == nil {
-		c.RequiredExecutables = make(map[string]string)
+	if err := depManager.Ensure(c.Executables.Required); err != nil {
+		return nil, err
 	}
 
-	for _, executable := range requiredExecutables {
-		if path, err := resolveToolPath(executable); err != nil {
-			missing = append(missing, executable)
-		} else {
-			c.RequiredExecutables[executable] = path
-		}
-	}
-
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("startup dependency check failed: missing %v", missing)
-	}
-
-	return c, nil
-}
-
-func resolveToolPath(toolName string) (string, error) {
-	if path, err := exec.LookPath(toolName); err == nil {
-		return path, nil
-	}
-
-	localAppData := os.Getenv("LOCALAPPDATA")
-	var patterns []string
-
-	switch toolName {
-	case "yt-dlp":
-		patterns = []string{
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Links", "yt-dlp.exe"),
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Packages", "yt-dlp.yt-dlp_*", "yt-dlp.exe"),
-		}
-	case "ffmpeg":
-		patterns = []string{
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_*", "*", "bin", "ffmpeg.exe"),
-			filepath.Join(localAppData, "Microsoft", "WinGet", "Packages", "yt-dlp.FFmpeg_*", "*", "bin", "ffmpeg.exe"),
-		}
-	default:
-		return "", fmt.Errorf("unsupported tool: %s", toolName)
-	}
-
-	for _, pattern := range patterns {
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			continue
-		}
-
-		for _, match := range matches {
-			if info, err := os.Stat(match); err == nil && !info.IsDir() {
-				return match, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("%s not found", toolName)
+	return depManager.Required, nil
 }

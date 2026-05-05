@@ -18,17 +18,24 @@ import (
 func main() {
 
 	// setting up the configurations
-	config := &config.Config{}
+	cfg, err := config.Load("local/local.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	_, err := config.MustExecute()
+	// Resolve required executables (yt-dlp, ffmpeg)
+	executablePaths, err := cfg.ResolveExecutables()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	router := http.NewServeMux()
 
-	// Creating the job worker
-	jobworker := job.JobWorker{Config: config}
+	// Creating the job worker with resolved executable paths
+	jobworker := job.JobWorker{
+		Config:          cfg,
+		ExecutablePaths: executablePaths,
+	}
 
 	// starting the worker
 	jobworker.StartWorkers()

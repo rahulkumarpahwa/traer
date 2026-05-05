@@ -18,8 +18,9 @@ import (
 )
 
 type JobWorker struct {
-	startOnce sync.Once
-	Config    *config.Config
+	startOnce       sync.Once
+	Config          *config.Config
+	ExecutablePaths map[string]string
 }
 
 var jobQueue = make(chan *types.Job, 100)
@@ -160,12 +161,12 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 		"-o", "downloads/%(title)s.%(ext)s",
 	}
 
-	ytDlpPath := jw.Config.RequiredExecutables["yt-dlp"]
+	ytDlpPath := jw.ExecutablePaths["yt-dlp"]
 	if ytDlpPath == "" {
 		return nil
 	}
 
-	ffmpegPath := jw.Config.RequiredExecutables["ffmpeg"]
+	ffmpegPath := jw.ExecutablePaths["ffmpeg"]
 	if ffmpegPath == "" {
 		return nil
 	}
