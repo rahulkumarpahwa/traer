@@ -21,13 +21,13 @@ type JobWorker struct {
 	startOnce       sync.Once
 	Config          *config.Config
 	ExecutablePaths map[string]string
+	JobsMu sync.RWMutex
 }
 
 var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
 var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
-var JobsMu sync.RWMutex
 
 func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
@@ -36,9 +36,9 @@ func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Jo
 		Status: types.StatusQueued,
 		Type:   contentType,
 	}
-	JobsMu.Lock()
+	jw.JobsMu.Lock()
 	Jobs[job.ID] = job
-	JobsMu.Unlock()
+	jw.JobsMu.Unlock()
 
 	// selection in case queue fulls
 	select {
@@ -52,10 +52,10 @@ func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Jo
 	return job
 }
 
-func GetJob(id string) *types.Job {
-	JobsMu.RLock()
+func (jw *JobWorker) GetJob(id string) *types.Job {
+	jw.JobsMu.RLock()
 	job := Jobs[id]
-	JobsMu.RUnlock()
+	jw.JobsMu.RUnlock()
 	return job
 }
 

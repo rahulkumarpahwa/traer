@@ -60,7 +60,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Request) {
 	var activeJobs []*types.Job
 
-	job.JobsMu.RLock()
+	hs.JW.JobsMu.RLock()
 	for _, j := range job.Jobs {
 		j.MU.Lock()
 		if j.Status == types.StatusQueued || j.Status == types.StatusRunning {
@@ -68,7 +68,7 @@ func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Reques
 		}
 		j.MU.Unlock()
 	}
-	job.JobsMu.RUnlock()
+	hs.JW.JobsMu.RUnlock()
 
 	utils.JSONResponse(w, http.StatusOK, activeJobs)
 }
@@ -87,7 +87,7 @@ func (hs *ServiceHandler) HandleJobStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	j := job.GetJob(id)
+	j := hs.JW.GetJob(id)
 	if j == nil {
 		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
 		return
@@ -118,15 +118,15 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 
 	fmt.Printf("[download] Attempting to download job with id: %s\n", id)
 
-	j := job.GetJob(id)
+	j :=  hs.JW.GetJob(id)
 	if j == nil {
 		fmt.Printf("[download] Job not found with id: %s\n", id)
-		job.JobsMu.RLock()
+		hs.JW.JobsMu.RLock()
 		fmt.Printf("[download] Available jobs: %v\n", len(job.Jobs))
 		for jid := range job.Jobs {
 			fmt.Printf("[download]   - %s\n", jid)
 		}
-		job.JobsMu.RUnlock()
+		hs.JW.JobsMu.RUnlock()
 		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
 		return
 	}
