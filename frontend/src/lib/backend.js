@@ -1,7 +1,6 @@
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const BACKEND_BASE_URL =
-  import.meta.env.DEV ? "/api" : "http://localhost:8080";
+const BACKEND_BASE_URL = import.meta.env.DEV ? "/api" : "http://localhost:8080";
 
 function getWailsApp() {
   return globalThis?.go?.main?.App ?? null;
@@ -237,19 +236,34 @@ export async function getDownloadUrl(id) {
   return buildDownloadUrl(id);
 }
 
-export async function downloadJobFile(id) {
+export async function downloadJobFile(id, fileName = "traer-output") {
   const api = getWailsApp();
   if (api?.DownloadJob) {
-    return api.DownloadJob(id);
+    try {
+      const result = await api.DownloadJob(id);
+      console.log("Wails download succeeded:", result);
+      return result || fileName;
+    } catch (error) {
+      console.error("Wails download bridge error:", error.message || error);
+      throw new Error(`Failed to save file: ${error.message || error}`);
+    }
   }
 
   const url = await getDownloadUrl(id);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Download failed with status ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
-  link.download = "";
+  link.href = objectUrl;
+  link.download = fileName;
   link.rel = "noreferrer";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  return url;
+  window.URL.revokeObjectURL(objectUrl);
+  return fileName;
 }

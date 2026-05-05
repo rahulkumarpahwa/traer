@@ -130,9 +130,16 @@ func (jw *JobWorker) processJob(job *types.Job) {
 		return
 	}
 
+	if resolvedPath, err := resolveOutputPath(job.Output); err == nil && resolvedPath != "" {
+		job.MU.Lock()
+		job.Output = resolvedPath
+		job.MU.Unlock()
+	}
+
 	job.MU.Lock()
 	job.Progress = 100
 	job.Status = types.StatusDone
+	fmt.Printf("[job] Job %s done. Output: %s\n", job.ID, job.Output)
 	job.MU.Unlock()
 }
 
@@ -192,6 +199,8 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
+	var lastPathLine string // Capture the last path line to ensure we get the final filename
+
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -207,15 +216,67 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 			}
 		}
 
-		if strings.Contains(line, "downloads/") || strings.Contains(line, "downloads\\") {
-			job.MU.Lock()
-			job.Output = strings.TrimSpace(line)
-			job.MU.Unlock()
+		// Extract filepath - look for the --print after_move:filepath output
+		// yt-dlp outputs just the filepath on its own line when using --print after_move:filepath
+		trimmedLine := strings.TrimSpace(line)
+		if (strings.HasPrefix(trimmedLine, "C:\\") || strings.HasPrefix(trimmedLine, "/")) &&
+			strings.Contains(trimmedLine, "downloads") {
+			// This looks like a filepath (Windows or Unix absolute path)
+			// Store it, we'll use the last one encountered to ensure we get the final filename
+			lastPathLine = trimmedLine
+			fmt.Printf("[job] Found path line: %s\n", trimmedLine)
 		}
 	}
 
+	// Set the final output path after processing all output
+	if lastPathLine != "" {
+		job.MU.Lock()
+		job.Output = lastPathLine
+		fmt.Printf("[job] Final captured output path: %s\n", lastPathLine)
+		job.MU.Unlock()
+	}
+
 	if err := scanner.Err(); err != nil {
-		// handle or log the error
 		fmt.Println("Error reading output:", err)
 	}
+}
+
+func resolveOutputPath(outputPath string) (string, error) {
+	if outputPath == "" {
+		return "", nil
+	}
+
+	if _, err := os.Stat(outputPath); err == nil {
+		return outputPath, nil
+	}
+
+	dir := filepath.Dir(outputPath)
+	base := filepath.Base(outputPath)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	stem = strings.TrimSpace(stem)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		candidateName := entry.Name()
+		candidateExt := filepath.Ext(candidateName)
+		if ext != "" && !strings.EqualFold(candidateExt, ext) {
+			continue
+		}
+
+		candidateStem := strings.TrimSpace(strings.TrimSuffix(candidateName, candidateExt))
+		if strings.HasPrefix(candidateStem, stem) || strings.HasPrefix(stem, candidateStem) {
+			return filepath.Join(dir, candidateName), nil
+		}
+	}
+
+	return "", os.ErrNotExist
 }

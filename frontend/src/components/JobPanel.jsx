@@ -18,7 +18,7 @@ function JobPanelContent() {
 
   const handleDownload = async (job) => {
     try {
-      const savedTo = await downloadJobFile(job.id);
+      const savedTo = await downloadJobFile(job.id, job.fileName || job.title);
       if (savedTo) {
         addNotification({
           tone: "success",

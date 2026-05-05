@@ -225,6 +225,8 @@ func (a *App) GetDownloadURL(id string) string {
 }
 
 func (a *App) DownloadJob(id string) (string, error) {
+	fmt.Printf("[DownloadJob] Starting download for job: %s\n", id)
+
 	job := a.GetJobStatus(id)
 	if strings.TrimSpace(job.ID) == "" || strings.TrimSpace(job.Status) == "failed" {
 		return "", fmt.Errorf("unable to load job details")
@@ -246,26 +248,36 @@ func (a *App) DownloadJob(id string) (string, error) {
 		DefaultFilename: defaultName,
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("save dialog failed: %w", err)
 	}
 	if strings.TrimSpace(targetPath) == "" {
-		return "", nil
+		fmt.Printf("[DownloadJob] User cancelled save dialog\n")
+		return "", nil // User cancelled
 	}
 
-	resp, err := http.Get(buildDownloadURL(id))
+	downloadURL := buildDownloadURL(id)
+	if downloadURL == "" {
+		return "", fmt.Errorf("invalid job id for download")
+	}
+
+	fmt.Printf("[DownloadJob] Fetching from backend: %s\n", downloadURL)
+
+	resp, err := http.Get(downloadURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("backend download request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	fmt.Printf("[DownloadJob] Backend response status: %d\n", resp.StatusCode)
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		var payload map[string]interface{}
 		if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr == nil {
 			if message, ok := payload["error"].(string); ok && message != "" {
-				return "", fmt.Errorf(message)
+				return "", fmt.Errorf("backend error: %s", message)
 			}
 			if message, ok := payload["message"].(string); ok && message != "" {
-				return "", fmt.Errorf(message)
+				return "", fmt.Errorf("backend error: %s", message)
 			}
 		}
 		return "", fmt.Errorf("download request failed with status %d", resp.StatusCode)
@@ -273,14 +285,15 @@ func (a *App) DownloadJob(id string) (string, error) {
 
 	targetFile, err := os.Create(targetPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create file at %s: %w", targetPath, err)
 	}
 	defer targetFile.Close()
 
 	if _, err := io.Copy(targetFile, resp.Body); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
+	fmt.Printf("[DownloadJob] Successfully saved to: %s\n", targetPath)
 	return targetPath, nil
 }
 

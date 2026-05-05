@@ -115,14 +115,25 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	fmt.Printf("[download] Attempting to download job with id: %s\n", id)
+
 	j := job.GetJob(id)
 	if j == nil {
+		fmt.Printf("[download] Job not found with id: %s\n", id)
+		job.JobsMu.RLock()
+		fmt.Printf("[download] Available jobs: %v\n", len(job.Jobs))
+		for jid := range job.Jobs {
+			fmt.Printf("[download]   - %s\n", jid)
+		}
+		job.JobsMu.RUnlock()
 		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
 		return
 	}
 
 	j.MU.Lock()
 	defer j.MU.Unlock()
+
+	fmt.Printf("[download] Job found: status=%s, output=%s\n", j.Status, j.Output)
 
 	if j.Status != types.StatusDone {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
