@@ -75,7 +75,7 @@ func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Reques
 
 func (hs *ServiceHandler) HandleGetInstances(w http.ResponseWriter, r *http.Request) {
 	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"instances": job.WorkerInstances,
+		"instances": hs.JW.Config.Workers.Instances,
 	})
 }
 

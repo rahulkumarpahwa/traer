@@ -29,8 +29,6 @@ var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
 var JobsMu sync.RWMutex
 
-var WorkerInstances int = 2
-
 func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Job {
 	job := &types.Job{
 		ID:     utils.GenerateID(),
@@ -67,7 +65,7 @@ func (jw *JobWorker) StartWorkers() {
 			panic(err)
 		}
 
-		for i := 0; i < WorkerInstances; i++ {
+		for i := 0; i < jw.Config.Workers.Instances; i++ {
 			go jw.worker()
 		}
 	})
