@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const backendBaseURL = "http://localhost:8080"
@@ -221,6 +224,66 @@ func (a *App) GetDownloadURL(id string) string {
 	return buildDownloadURL(id)
 }
 
+func (a *App) DownloadJob(id string) (string, error) {
+	job := a.GetJobStatus(id)
+	if strings.TrimSpace(job.ID) == "" || strings.TrimSpace(job.Status) == "failed" {
+		return "", fmt.Errorf("unable to load job details")
+	}
+	if strings.TrimSpace(job.Output) == "" && strings.TrimSpace(job.FileName) == "" {
+		return "", fmt.Errorf("file is not ready yet")
+	}
+
+	defaultName := job.FileName
+	if defaultName == "" {
+		defaultName = fileNameFromOutput(job.Output)
+	}
+	if defaultName == "" {
+		defaultName = "traer-output"
+	}
+
+	targetPath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Save Output File",
+		DefaultFilename: defaultName,
+	})
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(targetPath) == "" {
+		return "", nil
+	}
+
+	resp, err := http.Get(buildDownloadURL(id))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		var payload map[string]interface{}
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr == nil {
+			if message, ok := payload["error"].(string); ok && message != "" {
+				return "", fmt.Errorf(message)
+			}
+			if message, ok := payload["message"].(string); ok && message != "" {
+				return "", fmt.Errorf(message)
+			}
+		}
+		return "", fmt.Errorf("download request failed with status %d", resp.StatusCode)
+	}
+
+	targetFile, err := os.Create(targetPath)
+	if err != nil {
+		return "", err
+	}
+	defer targetFile.Close()
+
+	if _, err := io.Copy(targetFile, resp.Body); err != nil {
+		return "", err
+	}
+
+	return targetPath, nil
+}
+
 func (a *App) makeMockJob(payload StartJobPayload) JobResponse {
 	now := time.Now()
 	actionLabel := labelForKind(payload.Kind)
@@ -342,7 +405,14 @@ func fileNameFromOutput(output string) string {
 	if strings.TrimSpace(output) == "" {
 		return ""
 	}
-	return filepath.Base(strings.TrimSpace(output))
+	trimmed := strings.TrimSpace(output)
+	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == '/' || r == '\\'
+	})
+	if len(parts) == 0 {
+		return trimmed
+	}
+	return parts[len(parts)-1]
 }
 
 func buildDownloadURL(id string) string {

@@ -236,3 +236,20 @@ export async function getDownloadUrl(id) {
 
   return buildDownloadUrl(id);
 }
+
+export async function downloadJobFile(id) {
+  const api = getWailsApp();
+  if (api?.DownloadJob) {
+    return api.DownloadJob(id);
+  }
+
+  const url = await getDownloadUrl(id);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "";
+  link.rel = "noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  return url;
+}

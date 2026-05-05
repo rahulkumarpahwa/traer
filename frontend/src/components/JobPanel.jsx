@@ -10,9 +10,32 @@ import Header from "./Header";
 import NotificationTray from "./NotificationTray";
 import Sidebar from "./Sidebar";
 import StatusPill from "./StatusPill";
+import { downloadJobFile } from "../lib/backend";
 
 function JobPanelContent() {
   const activeJobs = useStore((state) => state.activeJobs);
+  const addNotification = useStore((state) => state.addNotification);
+
+  const handleDownload = async (job) => {
+    try {
+      const savedTo = await downloadJobFile(job.id);
+      if (savedTo) {
+        addNotification({
+          tone: "success",
+          title: "Download ready",
+          message: job.fileName
+            ? `${job.fileName} was saved successfully.`
+            : "The output file was saved successfully.",
+        });
+      }
+    } catch (error) {
+      addNotification({
+        tone: "warning",
+        title: "Download failed",
+        message: error?.message ?? "Unable to save the output file.",
+      });
+    }
+  };
 
   return (
     <section className="mx-auto max-w-6xl rounded-[32px] border border-emerald-500/15 bg-white/85 p-8 shadow-[0_24px_80px_-40px_rgba(5,46,22,0.45)] backdrop-blur-sm dark:border-emerald-400/10 dark:bg-[#07150f]/90 dark:shadow-[0_24px_80px_-40px_rgba(16,185,129,0.3)]">
@@ -81,15 +104,14 @@ function JobPanelContent() {
                           {displayName}
                         </h3>
                         {canDownload ? (
-                          <a
-                            href={job.downloadUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(job)}
                             className="inline-flex items-center gap-2 rounded-full border border-emerald-500/15 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 transition hover:border-emerald-500/30 hover:text-emerald-800 dark:border-emerald-400/15 dark:bg-white/[0.04] dark:text-emerald-200"
                           >
                             <Download className="h-3.5 w-3.5" strokeWidth={1.8} />
                             Download
-                          </a>
+                          </button>
                         ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-500 dark:text-emerald-100/55">
