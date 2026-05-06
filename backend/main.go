@@ -13,6 +13,8 @@ import (
 	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/job"
 	"github.com/rahulkumarpahwa/traer/routes"
+	"github.com/rahulkumarpahwa/traer/storage"
+	"github.com/rahulkumarpahwa/traer/storage/open"
 )
 
 func main() {
@@ -29,6 +31,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Opening the database:
+	openDB := open.OpenDB{}
+	DB, err := openDB.Open()
+
+	// Setting up the Storage
+	userStorage := storage.UserStorage{DB: DB}
+
 	router := http.NewServeMux()
 
 	// Creating the job worker with resolved executable paths
@@ -41,7 +50,7 @@ func main() {
 	jobworker.StartWorkers()
 
 	// Creating the new Service Hanlder
-	serviceHandler := routes.ServiceHandler{JW: &jobworker}
+	serviceHandler := routes.ServiceHandler{JW: &jobworker, UserStorage: userStorage}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)

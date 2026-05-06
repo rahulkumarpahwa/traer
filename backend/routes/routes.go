@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/rahulkumarpahwa/traer/job"
+	"github.com/rahulkumarpahwa/traer/storage"
 	"github.com/rahulkumarpahwa/traer/types"
 	"github.com/rahulkumarpahwa/traer/utils"
 	"github.com/rahulkumarpahwa/traer/validators"
@@ -16,6 +17,7 @@ import (
 
 type ServiceHandler struct {
 	JW *job.JobWorker
+	UserStorage storage.UserStorageInterface
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {
