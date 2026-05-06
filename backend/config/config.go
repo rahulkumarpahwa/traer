@@ -46,6 +46,11 @@ type Config struct {
 		Level  string `yaml:"level" env:"LOG_LEVEL" env-default:"info"`
 		Format string `yaml:"format" env:"LOG_FORMAT" env-default:"text"`
 	} `yaml:"logging"`
+
+	Jwt struct {
+		Secret string `yaml:"secret" env:"secret"`
+	}
+
 }
 
 // ResolveExecutables resolves all required executables and returns a map of tool names to paths.
