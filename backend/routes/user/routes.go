@@ -7,7 +7,9 @@ import (
 	"strconv"
 
 	"github.com/rahulkumarpahwa/traer/storage"
+	"github.com/rahulkumarpahwa/traer/types"
 	"github.com/rahulkumarpahwa/traer/utils"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // UserHandler handles HTTP requests for user operations
@@ -26,6 +28,74 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
+}
+
+// LoginRequest represents the JSON body for login
+type LoginRequest struct {
+	Username string `json:"username,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Password string `json:"password"`
+}
+
+// HandleLogin handles POST /login
+func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		utils.ErrorResponse(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid JSON body"))
+		return
+	}
+
+	// Validate input: must have password and either username or email
+	if req.Password == "" || (req.Username == "" && req.Email == "") {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("must provide either username+password or email+password"))
+		return
+	}
+
+	// Fetch user from storage
+	var userObj interface{}
+	var err error
+
+	if req.Username != "" {
+		userObj, err = u.UserStorage.GetUserByUsername(req.Username)
+	} else {
+		userObj, err = u.UserStorage.GetUserByEmail(req.Email)
+	}
+
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
+	if userObj == nil {
+		utils.ErrorResponse(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
+		return
+	}
+
+	// Type assert to *types.User
+	user, ok := userObj.(*types.User) // Replace with actual type, e.g., *types.User
+	if !ok {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("internal type assertion error"))
+		return
+	}
+
+	// Compare password hash
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		utils.ErrorResponse(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
+		return
+	}
+
+
+	// Token Generation
+
+
+	utils.JSONResponse(w, http.StatusOK, map[string]string{
+		"message": "login successful",
+		"user_id": fmt.Sprintf("%d", user.ID),
+	})
 }
 
 // HandleCreateUser handles POST /users
