@@ -14,7 +14,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/utils"
 	"github.com/rahulkumarpahwa/traer/validators"
 )
-
+  
 type ServiceHandler struct {
 	JW *job.JobWorker
 	UserStorage storage.UserStorageInterface

@@ -12,9 +12,11 @@ import (
 
 	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/job"
-	"github.com/rahulkumarpahwa/traer/routes"
 	"github.com/rahulkumarpahwa/traer/storage"
 	"github.com/rahulkumarpahwa/traer/storage/open"
+
+	jRoutes "github.com/rahulkumarpahwa/traer/routes/job"
+	uRoutes "github.com/rahulkumarpahwa/traer/routes/user"
 )
 
 func main() {
@@ -53,7 +55,9 @@ func main() {
 	jobworker.StartWorkers()
 
 	// Creating the new Service Hanlder
-	serviceHandler := routes.ServiceHandler{JW: &jobworker, UserStorage: &userStorage}
+	serviceHandler := jRoutes.ServiceHandler{JW: &jobworker}
+	// Creating the new user Handler
+	userHandler := uRoutes.UserHandler{UserStorage: &userStorage}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
@@ -61,6 +65,13 @@ func main() {
 	router.HandleFunc("GET /jobs/status", serviceHandler.HandleJobStatus)
 	router.HandleFunc("GET /jobs/download", serviceHandler.HandleDownload)
 	router.HandleFunc("GET /instances/get", serviceHandler.HandleGetInstances)
+
+	router.HandleFunc("POST /users", userHandler.HandleCreateUser)
+	router.HandleFunc("PUT /users", userHandler.HandleUpdateUser)
+	router.HandleFunc("DELETE /users", userHandler.HandleDeleteUser)
+	router.HandleFunc("GET /users/id", userHandler.HandleGetUserByID)
+	router.HandleFunc("GET /users/email", userHandler.HandleGetUserByEmail)
+	router.HandleFunc("GET /users/username", userHandler.HandleGetUserByUsername)
 
 	server := http.Server{
 		Addr:        ":8080",
