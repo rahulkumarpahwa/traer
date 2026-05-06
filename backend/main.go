@@ -53,7 +53,7 @@ func main() {
 	jobworker.StartWorkers()
 
 	// Creating the new Service Hanlder
-	serviceHandler := routes.ServiceHandler{JW: &jobworker, UserStorage: userStorage}
+	serviceHandler := routes.ServiceHandler{JW: &jobworker, UserStorage: &userStorage}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
