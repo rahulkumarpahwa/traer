@@ -32,8 +32,11 @@ func main() {
 	}
 
 	// Opening the database:
-	openDB := open.OpenDB{}
+	openDB := open.OpenDB{Config: cfg}
 	DB, err := openDB.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Setting up the Storage
 	userStorage := storage.UserStorage{DB: DB}
