@@ -36,7 +36,7 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 	email TEXT NOT NULL UNIQUE,                
 	password_hash TEXT NOT NULL,           
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME   
+    updated_at DATETIME  DEFAULT CURRENT_TIMESTAMP 
 	); `)
 	if err != nil {
 		return nil, err
