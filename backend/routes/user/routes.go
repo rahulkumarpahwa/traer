@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/rahulkumarpahwa/traer/auth"
+	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/storage"
 	"github.com/rahulkumarpahwa/traer/types"
 	"github.com/rahulkumarpahwa/traer/utils"
@@ -14,6 +17,7 @@ import (
 
 // UserHandler handles HTTP requests for user operations
 type UserHandler struct {
+	Config      *config.Config
 	UserStorage storage.UserStorageInterface
 }
 
@@ -88,9 +92,25 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	// Token Generation
+	token, err := auth.GenerateJWT(user, u.Config)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusUnauthorized, err)
+		return
+	}
 
+	// passing the token in the cookie
+	cookie := http.Cookie{
+		Name:     "token",
+		Value:    *token,
+		Path:     "/", // Accessible for all paths
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: true,
+		Secure:   false,
+	}
+
+	// Send the cookie to the client
+	http.SetCookie(w, &cookie)
 
 	utils.JSONResponse(w, http.StatusOK, map[string]string{
 		"message": "login successful",

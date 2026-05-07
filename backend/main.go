@@ -57,7 +57,7 @@ func main() {
 	// Creating the new Service Hanlder
 	serviceHandler := jRoutes.ServiceHandler{JW: &jobworker}
 	// Creating the new user Handler
-	userHandler := uRoutes.UserHandler{UserStorage: &userStorage}
+	userHandler := uRoutes.UserHandler{UserStorage: &userStorage, Config: cfg}
 
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
