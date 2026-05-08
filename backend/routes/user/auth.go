@@ -21,7 +21,7 @@ func (u *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Parse and Valid Token:
-		auth := auth.Auth{}
+		auth := auth.Auth{Config: u.Config}
 		claims, err := auth.ParseAndValidateToken(cookie)
 		if err != nil {
 			utils.ErrorResponse(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired token"))

@@ -11,10 +11,10 @@ type Config struct {
 	} `yaml:"app"`
 
 	HTTPServer struct {
-		Address         string `yaml:"address" env:"HTTP_ADDRESS" env-default:"localhost:8080"`
-		ReadTimeout     int `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20"`
-		WriteTimeout    int `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20"`
-		IdleTimeout int `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"20"`
+		Address      string `yaml:"address" env:"HTTP_ADDRESS" env-default:"localhost:8080"`
+		ReadTimeout  int    `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20"`
+		WriteTimeout int    `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20"`
+		IdleTimeout  int    `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"20"`
 	} `yaml:"http_server"`
 
 	Workers struct {
@@ -48,9 +48,8 @@ type Config struct {
 	} `yaml:"logging"`
 
 	Jwt struct {
-		Secret string `yaml:"secret" env:"secret"`
-	}
-
+		Secret string `yaml:"secret" env:"JWT_SECRET"`
+	} `yaml:"jwt"`
 }
 
 // ResolveExecutables resolves all required executables and returns a map of tool names to paths.

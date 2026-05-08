@@ -41,7 +41,6 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-
 // HandleLogin handles POST /login
 func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -95,8 +94,8 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Token Generation
 	token, err := auth.GenerateJWT(user, u.Config)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusUnauthorized, err)
+	if err != nil || token == nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("failed to generate token"))
 		return
 	}
 
