@@ -118,6 +118,39 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (u *UserHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		utils.ErrorResponse(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+
+	// check if the token cookie exists
+	_, err := r.Cookie("token")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			utils.ErrorResponse(w, http.StatusUnauthorized, fmt.Errorf("not authenticated"))
+			return
+		}
+	}
+
+	// Clear the token cookie
+	cookie := http.Cookie{
+		Name:     "token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Now().Add(-24 * time.Hour),
+		HttpOnly: true,
+		Secure:   false,
+	}
+
+	// Send the cookie to the client
+	http.SetCookie(w, &cookie)
+
+	utils.JSONResponse(w, http.StatusOK, map[string]string{
+		"message": "logout successful",
+	})
+}
+
 // HandleCreateUser handles POST /users
 func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -135,6 +168,31 @@ func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 	if req.Password == "" || (req.Username == "" && req.Email == "") {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("must provide either username+password or email+password"))
 		return
+	}
+
+	// check if the user already exists by email or username
+	if req.Email != "" {
+		existingUser, err := hs.UserStorage.GetUserByEmail(req.Email)
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusInternalServerError, err)
+			return
+		}
+		if existingUser != nil {
+			utils.ErrorResponse(w, http.StatusConflict, fmt.Errorf("user with this email already exists"))
+			return
+		}
+	}
+
+	if req.Username != "" {
+		existingUser, err := hs.UserStorage.GetUserByUsername(req.Username)
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusInternalServerError, err)
+			return
+		}
+		if existingUser != nil {
+			utils.ErrorResponse(w, http.StatusConflict, fmt.Errorf("user with this username already exists"))
+			return
+		}
 	}
 
 	if err := hs.UserStorage.CreateUser(req.Username, req.Email, req.Password); err != nil {

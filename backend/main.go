@@ -65,6 +65,7 @@ func main() {
 	// Auth routes - public, no middleware
 	router.Handle("POST /login", http.HandlerFunc(userHandler.HandleLogin))
 	router.Handle("POST /users", http.HandlerFunc(userHandler.HandleCreateUser)) // Registration is public
+	router.Handle("POST /logout", http.HandlerFunc(userHandler.HandleLogout))
 
 	// Job routes - auth required
 	router.Handle("POST /jobs/create", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleCreateJobs)))
