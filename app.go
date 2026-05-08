@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,9 +20,10 @@ import (
 const backendBaseURL = "http://localhost:8080"
 
 type App struct {
-	ctx      context.Context
-	settings SettingsPayload
-	profile  Profile
+	ctx          context.Context
+	httpClient   *http.Client
+	settings     SettingsPayload
+	currentUserID int
 }
 
 type AppState struct {
@@ -41,22 +44,35 @@ type SettingsPayload struct {
 }
 
 type LoginPayload struct {
-	Username string `json:"username"`
+	Username string `json:"username,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Password string `json:"password"`
+}
+
+type SignupPayload struct {
+	Username string `json:"username,omitempty"`
+	Email    string `json:"email,omitempty"`
 	Password string `json:"password"`
 }
 
 type User struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID        int    `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	Role      string `json:"role,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
 type Profile struct {
 	Name       string `json:"name"`
+	Username   string `json:"username"`
 	Email      string `json:"email"`
 	Plan       string `json:"plan"`
 	Bio        string `json:"bio"`
 	LastActive string `json:"lastActive"`
+	CreatedAt  string `json:"createdAt,omitempty"`
+	UpdatedAt  string `json:"updatedAt,omitempty"`
 }
 
 type StartJobPayload struct {
@@ -91,21 +107,37 @@ type backendJob struct {
 	Error    string  `json:"error"`
 }
 
+type backendUser struct {
+	ID        int        `json:"id"`
+	Username  string     `json:"username"`
+	Email     string     `json:"email"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+}
+
+type loginResponse struct {
+	Message string `json:"message"`
+	UserID  string `json:"user_id"`
+}
+
+type createUserResponse struct {
+	Message string `json:"message"`
+}
+
 func NewApp() *App {
+	jar, _ := cookiejar.New(nil)
+
 	return &App{
+		httpClient: &http.Client{
+			Timeout: 20 * time.Second,
+			Jar:     jar,
+		},
 		settings: SettingsPayload{
 			WhisperURL: "http://localhost:9000/transcribe",
 			OllamaURL:  "http://localhost:11434",
 			CloudURL:   "https://cloud.traer.app/upload",
 			OutputDir:  "outputs",
 			Theme:      "midnight",
-		},
-		profile: Profile{
-			Name:       "Traer Operator",
-			Email:      "operator@traer.local",
-			Plan:       "Studio",
-			Bio:        "Runs clean media workflows with practical defaults.",
-			LastActive: time.Now().Format(time.RFC3339),
 		},
 	}
 }
@@ -119,11 +151,15 @@ func (a *App) GetInitialState() AppState {
 		AppName:     "traer",
 		RecentLinks: []string{},
 		Settings:    a.settings,
-		Profile:     a.profile,
+		Profile: Profile{
+			Name: "Traer Operator",
+			Plan: "Studio",
+			Bio:  "Runs clean media workflows with practical defaults.",
+		},
 		Suggestions: []string{
-			"Paste a YouTube, Loom, or podcast URL to start.",
-			"Use Transcribe for clean markdown notes.",
-			"Ship audio or video to cloud storage once processing completes.",
+			"Sign in to create audio and video jobs.",
+			"Your session is stored in the backend JWT cookie.",
+			"Use the profile page to verify which account is active.",
 		},
 		Capabilities: map[string]bool{
 			"backendBound": a.ctx != nil,
@@ -132,17 +168,34 @@ func (a *App) GetInitialState() AppState {
 	}
 }
 
-func (a *App) Login(payload LoginPayload) User {
-	name := strings.TrimSpace(payload.Username)
-	if name == "" {
-		name = "Operator"
+func (a *App) Login(payload LoginPayload) (User, error) {
+	reqBody, _ := json.Marshal(payload)
+
+	var response loginResponse
+	if err := a.doBackendJSON(http.MethodPost, "/login", bytes.NewReader(reqBody), &response); err != nil {
+		return User{}, err
 	}
 
-	return User{
-		Name:  name,
-		Email: fmt.Sprintf("%s@traer.local", strings.ToLower(strings.ReplaceAll(name, " ", "."))),
-		Role:  "Admin",
+	userID, err := strconv.Atoi(strings.TrimSpace(response.UserID))
+	if err != nil {
+		return User{}, fmt.Errorf("invalid user id returned by backend")
 	}
+
+	a.currentUserID = userID
+	return a.GetUserByID(userID)
+}
+
+func (a *App) Signup(payload SignupPayload) (map[string]string, error) {
+	reqBody, _ := json.Marshal(payload)
+
+	var response createUserResponse
+	if err := a.doBackendJSON(http.MethodPost, "/users", bytes.NewReader(reqBody), &response); err != nil {
+		return nil, err
+	}
+
+	return map[string]string{
+		"message": response.Message,
+	}, nil
 }
 
 func (a *App) SaveSettings(payload SettingsPayload) SettingsPayload {
@@ -150,14 +203,35 @@ func (a *App) SaveSettings(payload SettingsPayload) SettingsPayload {
 	return a.settings
 }
 
-func (a *App) GetProfile() Profile {
-	a.profile.LastActive = time.Now().Format(time.RFC3339)
-	return a.profile
+func (a *App) GetProfile() (Profile, error) {
+	if a.currentUserID <= 0 {
+		return Profile{}, fmt.Errorf("no authenticated user")
+	}
+
+	user, err := a.GetUserByID(a.currentUserID)
+	if err != nil {
+		return Profile{}, err
+	}
+
+	return mapUserToProfile(user), nil
+}
+
+func (a *App) GetUserByID(id int) (User, error) {
+	if id <= 0 {
+		return User{}, fmt.Errorf("invalid user id")
+	}
+
+	var backendResp backendUser
+	if err := a.doBackendJSON(http.MethodGet, "/users/id?id="+strconv.Itoa(id), nil, &backendResp); err != nil {
+		return User{}, err
+	}
+
+	return mapBackendUser(backendResp), nil
 }
 
 func (a *App) StartJob(payload StartJobPayload) JobResponse {
 	if payload.Kind != "audio" && payload.Kind != "video" {
-		return a.makeMockJob(payload)
+		return a.makeLocalPlaceholderJob(payload)
 	}
 
 	reqBody, _ := json.Marshal(map[string]string{
@@ -166,7 +240,7 @@ func (a *App) StartJob(payload StartJobPayload) JobResponse {
 	})
 
 	var created backendJob
-	if err := doBackendJSON(http.MethodPost, "/jobs/create", bytes.NewReader(reqBody), &created); err != nil {
+	if err := a.doBackendJSON(http.MethodPost, "/jobs/create", bytes.NewReader(reqBody), &created); err != nil {
 		return a.makeErrorJob(payload, err)
 	}
 
@@ -194,13 +268,13 @@ func (a *App) StartJob(payload StartJobPayload) JobResponse {
 
 func (a *App) GetActiveJobs() []JobResponse {
 	var jobs []backendJob
-	if err := doBackendJSON(http.MethodGet, "/jobs/active", nil, &jobs); err != nil {
+	if err := a.doBackendJSON(http.MethodGet, "/jobs/active", nil, &jobs); err != nil {
 		return []JobResponse{}
 	}
 
 	active := make([]JobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		active = append(active, mapBackendJob(job))
+		active = append(active, mapBackendJobToFrontend(job))
 	}
 
 	return active
@@ -209,7 +283,7 @@ func (a *App) GetActiveJobs() []JobResponse {
 func (a *App) GetJobStatus(id string) JobResponse {
 	escapedID := url.QueryEscape(strings.TrimSpace(id))
 	var job backendJob
-	if err := doBackendJSON(http.MethodGet, "/jobs/status?id="+escapedID, nil, &job); err != nil {
+	if err := a.doBackendJSON(http.MethodGet, "/jobs/status?id="+escapedID, nil, &job); err != nil {
 		return JobResponse{
 			ID:      id,
 			Status:  "failed",
@@ -217,7 +291,7 @@ func (a *App) GetJobStatus(id string) JobResponse {
 		}
 	}
 
-	return mapBackendJob(job)
+	return mapBackendJobToFrontend(job)
 }
 
 func (a *App) GetDownloadURL(id string) string {
@@ -225,8 +299,6 @@ func (a *App) GetDownloadURL(id string) string {
 }
 
 func (a *App) DownloadJob(id string) (string, error) {
-	fmt.Printf("[DownloadJob] Starting download for job: %s\n", id)
-
 	job := a.GetJobStatus(id)
 	if strings.TrimSpace(job.ID) == "" || strings.TrimSpace(job.Status) == "failed" {
 		return "", fmt.Errorf("unable to load job details")
@@ -248,36 +320,31 @@ func (a *App) DownloadJob(id string) (string, error) {
 		DefaultFilename: defaultName,
 	})
 	if err != nil {
-		return "", fmt.Errorf("save dialog failed: %w", err)
+		return "", err
 	}
 	if strings.TrimSpace(targetPath) == "" {
-		fmt.Printf("[DownloadJob] User cancelled save dialog\n")
-		return "", nil // User cancelled
+		return "", nil
 	}
 
-	downloadURL := buildDownloadURL(id)
-	if downloadURL == "" {
-		return "", fmt.Errorf("invalid job id for download")
-	}
-
-	fmt.Printf("[DownloadJob] Fetching from backend: %s\n", downloadURL)
-
-	resp, err := http.Get(downloadURL)
+	req, err := http.NewRequest(http.MethodGet, buildDownloadURL(id), nil)
 	if err != nil {
-		return "", fmt.Errorf("backend download request failed: %w", err)
+		return "", err
+	}
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return "", err
 	}
 	defer resp.Body.Close()
-
-	fmt.Printf("[DownloadJob] Backend response status: %d\n", resp.StatusCode)
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		var payload map[string]interface{}
 		if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr == nil {
 			if message, ok := payload["error"].(string); ok && message != "" {
-				return "", fmt.Errorf("backend error: %s", message)
+				return "", fmt.Errorf(message)
 			}
 			if message, ok := payload["message"].(string); ok && message != "" {
-				return "", fmt.Errorf("backend error: %s", message)
+				return "", fmt.Errorf(message)
 			}
 		}
 		return "", fmt.Errorf("download request failed with status %d", resp.StatusCode)
@@ -285,19 +352,18 @@ func (a *App) DownloadJob(id string) (string, error) {
 
 	targetFile, err := os.Create(targetPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create file at %s: %w", targetPath, err)
+		return "", err
 	}
 	defer targetFile.Close()
 
 	if _, err := io.Copy(targetFile, resp.Body); err != nil {
-		return "", fmt.Errorf("failed to write file: %w", err)
+		return "", err
 	}
 
-	fmt.Printf("[DownloadJob] Successfully saved to: %s\n", targetPath)
 	return targetPath, nil
 }
 
-func (a *App) makeMockJob(payload StartJobPayload) JobResponse {
+func (a *App) makeLocalPlaceholderJob(payload StartJobPayload) JobResponse {
 	now := time.Now()
 	actionLabel := labelForKind(payload.Kind)
 
@@ -306,13 +372,11 @@ func (a *App) makeMockJob(payload StartJobPayload) JobResponse {
 		Kind:      payload.Kind,
 		Option:    payload.Option,
 		Title:     fmt.Sprintf("%s queued", actionLabel),
-		Message:   fmt.Sprintf("%s for %s is now processing with preset %s.", actionLabel, payload.URL, payload.Option),
+		Message:   fmt.Sprintf("%s is not connected to the auth backend yet.", actionLabel),
 		CreatedAt: now.Format(time.RFC3339),
 		SourceURL: payload.URL,
 		Logs: []string{
-			fmt.Sprintf("[%s] traer accepted %s request", now.Format("15:04:05"), payload.Kind),
-			fmt.Sprintf("[%s] source resolved: %s", now.Add(1*time.Second).Format("15:04:05"), payload.URL),
-			fmt.Sprintf("[%s] preset selected: %s", now.Add(2*time.Second).Format("15:04:05"), payload.Option),
+			fmt.Sprintf("[%s] local placeholder started for %s", now.Format("15:04:05"), payload.Kind),
 		},
 	}
 }
@@ -331,22 +395,7 @@ func (a *App) makeErrorJob(payload StartJobPayload, err error) JobResponse {
 	}
 }
 
-func labelForKind(kind string) string {
-	switch kind {
-	case "audio":
-		return "Audio package"
-	case "video":
-		return "Video export"
-	case "transcribe":
-		return "Transcript"
-	case "cloud":
-		return "Cloud sync"
-	default:
-		return "Workflow"
-	}
-}
-
-func doBackendJSON(method, path string, body *bytes.Reader, out interface{}) error {
+func (a *App) doBackendJSON(method, path string, body *bytes.Reader, out interface{}) error {
 	var reqBody *bytes.Reader
 	if body == nil {
 		reqBody = bytes.NewReader(nil)
@@ -358,12 +407,11 @@ func doBackendJSON(method, path string, body *bytes.Reader, out interface{}) err
 	if err != nil {
 		return err
 	}
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -385,7 +433,51 @@ func doBackendJSON(method, path string, body *bytes.Reader, out interface{}) err
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func mapBackendJob(job backendJob) JobResponse {
+func mapBackendUser(user backendUser) User {
+	updatedAt := ""
+	if user.UpdatedAt != nil {
+		updatedAt = user.UpdatedAt.Format(time.RFC3339)
+	}
+
+	return User{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		Role:      "Operator",
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: updatedAt,
+	}
+}
+
+func mapUserToProfile(user User) Profile {
+	return Profile{
+		Name:       user.Username,
+		Username:   user.Username,
+		Email:      user.Email,
+		Plan:       "Studio",
+		Bio:        "Authenticated workspace operator.",
+		LastActive: time.Now().Format(time.RFC3339),
+		CreatedAt:  user.CreatedAt,
+		UpdatedAt:  user.UpdatedAt,
+	}
+}
+
+func labelForKind(kind string) string {
+	switch kind {
+	case "audio":
+		return "Audio package"
+	case "video":
+		return "Video export"
+	case "transcribe":
+		return "Transcript"
+	case "cloud":
+		return "Cloud sync"
+	default:
+		return "Workflow"
+	}
+}
+
+func mapBackendJobToFrontend(job backendJob) JobResponse {
 	fileName := fileNameFromOutput(job.Output)
 	title := labelForKind(job.Type)
 	if fileName != "" {

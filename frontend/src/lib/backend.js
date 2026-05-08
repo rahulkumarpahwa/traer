@@ -28,8 +28,50 @@ function buildDownloadUrl(id) {
   return `${BACKEND_BASE_URL}/jobs/download?id=${encodedId}`;
 }
 
+function normalizeLoginPayload(payload) {
+  const identifier = payload.identifier?.trim() ?? "";
+  return {
+    username: identifier && !identifier.includes("@") ? identifier : "",
+    email: identifier.includes("@") ? identifier : "",
+    password: payload.password,
+  };
+}
+
+function normalizeSignupPayload(payload) {
+  return {
+    username: payload.username?.trim() ?? "",
+    email: payload.email?.trim() ?? "",
+    password: payload.password,
+  };
+}
+
+function mapBackendUser(user) {
+  return {
+    id: Number(user.id ?? 0),
+    username: user.username ?? "",
+    email: user.email ?? "",
+    role: user.role ?? "Operator",
+    createdAt: user.createdAt ?? user.created_at ?? "",
+    updatedAt: user.updatedAt ?? user.updated_at ?? "",
+  };
+}
+
+function mapUserToProfile(user) {
+  return {
+    name: user.username || "Operator",
+    username: user.username || "",
+    email: user.email || "",
+    plan: "Studio",
+    bio: "Authenticated workspace operator.",
+    lastActive: new Date().toISOString(),
+    createdAt: user.createdAt || "",
+    updatedAt: user.updatedAt || "",
+  };
+}
+
 async function backendFetch(path, options = {}) {
   const response = await fetch(`${BACKEND_BASE_URL}${path}`, {
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
@@ -45,7 +87,9 @@ async function backendFetch(path, options = {}) {
     } catch {
       // Ignore JSON parse errors and use the fallback message.
     }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
@@ -116,35 +160,57 @@ export async function getInitialState() {
     },
     profile: {
       name: "Traer Operator",
-      email: "operator@traer.local",
+      username: "",
+      email: "",
       plan: "Studio",
-      bio: "Runs clean media workflows with practical defaults.",
+      bio: "Authenticated workspace operator.",
       lastActive: new Date().toISOString(),
     },
     suggestions: [
-      "Paste a YouTube, Loom, or podcast URL to start.",
-      "Use Transcribe for clean markdown notes.",
-      "Ship audio or video to cloud storage once processing completes.",
+      "Sign in to create audio and video jobs.",
+      "Your session is backed by a JWT cookie from the backend.",
+      "Use the profile page to confirm which account is active.",
     ],
     capabilities: {
       backendBound: false,
-      mockMode: true,
+      mockMode: false,
     },
   };
 }
 
 export async function login(payload) {
   const api = getWailsApp();
+  const normalized = normalizeLoginPayload(payload);
+
   if (api?.Login) {
-    return api.Login(payload);
+    const user = await api.Login(normalized);
+    return mapBackendUser(user);
   }
 
-  await wait(180);
+  const response = await backendFetch("/login", {
+    method: "POST",
+    body: JSON.stringify(normalized),
+  });
+
   return {
-    name: payload.username || "Operator",
-    email: `${(payload.username || "operator").toLowerCase()}@traer.local`,
-    role: "Admin",
+    id: Number(response.user_id),
+    username: normalized.username || "",
+    email: normalized.email || "",
   };
+}
+
+export async function signup(payload) {
+  const api = getWailsApp();
+  const normalized = normalizeSignupPayload(payload);
+
+  if (api?.Signup) {
+    return api.Signup(normalized);
+  }
+
+  return backendFetch("/users", {
+    method: "POST",
+    body: JSON.stringify(normalized),
+  });
 }
 
 export async function saveSettings(payload) {
@@ -157,20 +223,37 @@ export async function saveSettings(payload) {
   return payload;
 }
 
-export async function getProfile() {
+export async function getUserById(userId) {
   const api = getWailsApp();
-  if (api?.GetProfile) {
-    return api.GetProfile();
+
+  if (api?.GetUserByID) {
+    const user = await api.GetUserByID(Number(userId));
+    return mapBackendUser(user);
   }
 
-  await wait(140);
-  return {
-    name: "Traer Operator",
-    email: "operator@traer.local",
-    plan: "Studio",
-    bio: "Runs clean media workflows with practical defaults.",
-    lastActive: new Date().toISOString(),
-  };
+  const user = await backendFetch(`/users/id?id=${encodeURIComponent(userId)}`);
+  return mapBackendUser(user);
+}
+
+export async function getProfile(userId) {
+  const api = getWailsApp();
+
+  if (api?.GetProfile) {
+    const profile = await api.GetProfile();
+    return {
+      name: profile.name,
+      username: profile.username ?? profile.name ?? "",
+      email: profile.email ?? "",
+      plan: profile.plan ?? "Studio",
+      bio: profile.bio ?? "Authenticated workspace operator.",
+      lastActive: profile.lastActive ?? new Date().toISOString(),
+      createdAt: profile.createdAt ?? "",
+      updatedAt: profile.updatedAt ?? "",
+    };
+  }
+
+  const user = await getUserById(userId);
+  return mapUserToProfile(user);
 }
 
 export async function startJob(payload) {
@@ -239,18 +322,11 @@ export async function getDownloadUrl(id) {
 export async function downloadJobFile(id, fileName = "traer-output") {
   const api = getWailsApp();
   if (api?.DownloadJob) {
-    try {
-      const result = await api.DownloadJob(id);
-      console.log("Wails download succeeded:", result);
-      return result || fileName;
-    } catch (error) {
-      console.error("Wails download bridge error:", error.message || error);
-      throw new Error(`Failed to save file: ${error.message || error}`);
-    }
+    return api.DownloadJob(id);
   }
 
   const url = await getDownloadUrl(id);
-  const response = await fetch(url);
+  const response = await fetch(url, { credentials: "include" });
   if (!response.ok) {
     throw new Error(`Download failed with status ${response.status}`);
   }

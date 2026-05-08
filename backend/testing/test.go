@@ -40,7 +40,7 @@ func testAllRoutes() {
 	baseURL := "http://localhost:8080"
 	client := &http.Client{}
 
-	fmt.Println("\n=== TESTING ALL BACKEND ROUTES ===\n")
+	fmt.Println("\n=== TESTING ALL BACKEND ROUTES ===")
 
 	// Test 1: Health Check
 	fmt.Println("1️⃣  Testing GET / (Health Check)")

@@ -1,15 +1,19 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import {
+  downloadJobFile,
   getActiveJobs,
-  getDownloadUrl,
   getInitialState,
   getJobStatus,
   getProfile,
+  getUserById,
   login,
   saveSettings,
+  signup,
   startJob,
 } from "../lib/backend";
+
+const USER_ID_STORAGE_KEY = "traer.userId";
 
 const actionOptions = {
   transcribe: ["Markdown", "MDX", "TXT", "JSON"],
@@ -46,13 +50,32 @@ function mergeJobs(existingJobs, incomingJobs) {
   );
 }
 
+function persistUserId(userId) {
+  if (typeof window === "undefined") return;
+
+  if (userId) {
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, String(userId));
+  } else {
+    window.localStorage.removeItem(USER_ID_STORAGE_KEY);
+  }
+}
+
+function readPersistedUserId() {
+  if (typeof window === "undefined") return 0;
+  const raw = window.localStorage.getItem(USER_ID_STORAGE_KEY);
+  return raw ? Number(raw) : 0;
+}
+
 export const useStore = create((set, get) => ({
   appName: "traer",
   hydrated: false,
+  authReady: false,
+  authenticated: false,
+  currentUserId: 0,
   sidebarOpen: true,
   capabilities: {
     backendBound: false,
-    mockMode: true,
+    mockMode: false,
   },
   user: null,
   profile: null,
@@ -70,6 +93,8 @@ export const useStore = create((set, get) => ({
   },
   initialize: async () => {
     const data = await getInitialState();
+    const persistedUserId = readPersistedUserId();
+
     set({
       hydrated: true,
       appName: data.appName,
@@ -79,17 +104,46 @@ export const useStore = create((set, get) => ({
       suggestions: data.suggestions ?? [],
       capabilities: data.capabilities ?? {
         backendBound: false,
-        mockMode: true,
+        mockMode: false,
       },
       terminalLines: [
         "[system] traer ready",
         data.capabilities?.backendBound
           ? "[bridge] wails backend detected"
-          : "[bridge] running in mock preview mode",
+          : "[bridge] browser client active",
       ],
+      currentUserId: persistedUserId,
     });
 
-    await get().refreshActiveJobs();
+    if (persistedUserId) {
+      try {
+        const [user, profile] = await Promise.all([
+          getUserById(persistedUserId),
+          getProfile(persistedUserId),
+        ]);
+
+        set({
+          authenticated: true,
+          authReady: true,
+          currentUserId: persistedUserId,
+          user,
+          profile,
+        });
+
+        await get().refreshActiveJobs();
+        return;
+      } catch {
+        persistUserId(0);
+      }
+    }
+
+    set({
+      authReady: true,
+      authenticated: false,
+      currentUserId: 0,
+      user: null,
+      profile: null,
+    });
   },
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   addNotification: (notification) =>
@@ -123,15 +177,51 @@ export const useStore = create((set, get) => ({
       },
     })),
   loginUser: async (payload) => {
-    const user = await login(payload);
-    set({ user });
+    const sessionUser = await login(payload);
+    const resolvedUser = sessionUser?.username && sessionUser?.email
+      ? sessionUser
+      : await getUserById(sessionUser.id);
+    const profile = await getProfile(resolvedUser.id);
+
+    persistUserId(resolvedUser.id);
+    set({
+      authenticated: true,
+      authReady: true,
+      currentUserId: resolvedUser.id,
+      user: resolvedUser,
+      profile,
+    });
+
     get().addNotification({
       tone: "success",
-      title: `Welcome back, ${user.name}`,
-      message: "Your workspace is ready.",
+      title: `Welcome back, ${resolvedUser.username || resolvedUser.email}`,
+      message: "Your authenticated workspace is ready.",
     });
-    get().addTerminalLine(`[auth] signed in as ${user.email}`);
-    return user;
+    get().addTerminalLine(`[auth] signed in as ${resolvedUser.email}`);
+    await get().refreshActiveJobs();
+    return resolvedUser;
+  },
+  signupUser: async (payload) => {
+    await signup(payload);
+    get().addNotification({
+      tone: "success",
+      title: "Account created",
+      message: "Your account has been created. Signing you in now.",
+    });
+    return get().loginUser({
+      identifier: payload.email || payload.username,
+      password: payload.password,
+    });
+  },
+  logoutUser: () => {
+    persistUserId(0);
+    set({
+      authenticated: false,
+      currentUserId: 0,
+      user: null,
+      profile: null,
+      activeJobs: [],
+    });
   },
   saveAppSettings: async (payload) => {
     const settings = await saveSettings(payload);
@@ -145,25 +235,29 @@ export const useStore = create((set, get) => ({
     return settings;
   },
   refreshProfile: async () => {
-    const profile = await getProfile();
-    set({ profile });
+    const userId = get().currentUserId;
+    if (!userId) {
+      throw new Error("No authenticated user");
+    }
+
+    const [user, profile] = await Promise.all([getUserById(userId), getProfile(userId)]);
+    set({ user, profile });
     return profile;
   },
   refreshActiveJobs: async () => {
+    if (!get().authenticated) return;
+
     try {
       const remoteActiveJobs = await getActiveJobs();
       const trackedJobs = get().activeJobs.filter((job) => job.source === "backend");
       const trackedStatuses = await Promise.all(
         trackedJobs.map(async (job) => {
           try {
-            const status = await getJobStatus(job.id);
             return {
-              ...status,
+              ...(await getJobStatus(job.id)),
               option: job.option,
               createdAt: job.createdAt,
               source: "backend",
-              downloadUrl:
-                status.downloadUrl || (status.status === "done" ? await getDownloadUrl(job.id) : ""),
             };
           } catch {
             return job;
@@ -179,8 +273,10 @@ export const useStore = create((set, get) => ({
       set((state) => ({
         activeJobs: mergeJobs(state.activeJobs, [...normalizedRemote, ...trackedStatuses]).slice(0, 12),
       }));
-    } catch {
-      // Ignore polling errors so the UI can keep rendering existing jobs.
+    } catch (error) {
+      if (error?.status === 401) {
+        get().logoutUser();
+      }
     }
   },
   runJob: async ({ kind, url }) => {
@@ -269,11 +365,16 @@ export const useStore = create((set, get) => ({
       }, 700 * (index + 1));
     });
   },
+  saveDownloadedJob: async (job) => {
+    const savedTo = await downloadJobFile(job.id, job.fileName || job.title);
+    return savedTo;
+  },
   actionOptions,
 }));
 
 export function useHydrateApp() {
   const hydrated = useStore((state) => state.hydrated);
+  const authenticated = useStore((state) => state.authenticated);
   const initialize = useStore((state) => state.initialize);
   const refreshActiveJobs = useStore((state) => state.refreshActiveJobs);
 
@@ -284,12 +385,12 @@ export function useHydrateApp() {
   }, [hydrated, initialize]);
 
   useEffect(() => {
-    if (!hydrated) return undefined;
+    if (!hydrated || !authenticated) return undefined;
 
     const intervalId = window.setInterval(() => {
       refreshActiveJobs();
     }, 3000);
 
     return () => window.clearInterval(intervalId);
-  }, [hydrated, refreshActiveJobs]);
+  }, [hydrated, authenticated, refreshActiveJobs]);
 }
