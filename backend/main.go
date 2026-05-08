@@ -59,15 +59,21 @@ func main() {
 	// Creating the new user Handler
 	userHandler := uRoutes.UserHandler{UserStorage: &userStorage, Config: cfg}
 
-	// Health check
+	// Health check - no auth needed
 	router.HandleFunc("GET /", healthHandler)
+
+	// Auth routes - public, no middleware
+	router.Handle("POST /login", http.HandlerFunc(userHandler.HandleLogin))
+	router.Handle("POST /users", http.HandlerFunc(userHandler.HandleCreateUser)) // Registration is public
+
+	// Job routes - auth required
 	router.Handle("POST /jobs/create", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleCreateJobs)))
 	router.Handle("GET /jobs/active", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleActiveJobs)))
 	router.Handle("GET /jobs/status", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobStatus)))
 	router.Handle("GET /jobs/download", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleDownload)))
 	router.Handle("GET /instances/get", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleGetInstances)))
 
-	router.Handle("POST /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleCreateUser)))
+	// User routes - auth required
 	router.Handle("PUT /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleUpdateUser)))
 	router.Handle("DELETE /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleDeleteUser)))
 	router.Handle("GET /users/id", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByID)))
@@ -75,11 +81,11 @@ func main() {
 	router.Handle("GET /users/username", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByUsername)))
 
 	server := http.Server{
-		Addr:        cfg.HTTPServer.Address,
-		Handler:     router,
-		ReadTimeout: time.Duration(cfg.HTTPServer.ReadTimeout) * time.Second,
+		Addr:         cfg.HTTPServer.Address,
+		Handler:      router,
+		ReadTimeout:  time.Duration(cfg.HTTPServer.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(cfg.HTTPServer.WriteTimeout) * time.Second,
-		IdleTimeout: time.Duration(cfg.HTTPServer.IdleTimeout) * time.Second,
+		IdleTimeout:  time.Duration(cfg.HTTPServer.IdleTimeout) * time.Second,
 	}
 
 	notifyChan := make(chan os.Signal, 1)
