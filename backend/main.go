@@ -61,11 +61,11 @@ func main() {
 
 	// Health check
 	router.HandleFunc("GET /", healthHandler)
-	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
-	router.HandleFunc("GET /jobs/active", serviceHandler.HandleActiveJobs)
-	router.HandleFunc("GET /jobs/status", serviceHandler.HandleJobStatus)
-	router.HandleFunc("GET /jobs/download", serviceHandler.HandleDownload)
-	router.HandleFunc("GET /instances/get", serviceHandler.HandleGetInstances)
+	router.Handle("POST /jobs/create", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleCreateJobs)))
+	router.Handle("GET /jobs/active", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleActiveJobs)))
+	router.Handle("GET /jobs/status", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobStatus)))
+	router.Handle("GET /jobs/download", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleDownload)))
+	router.Handle("GET /instances/get", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleGetInstances)))
 
 	router.Handle("POST /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleCreateUser)))
 	router.Handle("PUT /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleUpdateUser)))
@@ -95,9 +95,9 @@ func main() {
 
 	<-notifyChan
 
-	log.Println("Server Shutdown in 5..4..3..2..1!")
+	log.Println("Server Shutdown in 3..2..1!")
 
-	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancelCtx := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancelCtx()
 
 	err = server.Shutdown(ctx)
