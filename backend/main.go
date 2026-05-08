@@ -59,6 +59,7 @@ func main() {
 	// Creating the new user Handler
 	userHandler := uRoutes.UserHandler{UserStorage: &userStorage, Config: cfg}
 
+	// Health check
 	router.HandleFunc("GET /", healthHandler)
 	router.HandleFunc("POST /jobs/create", serviceHandler.HandleCreateJobs)
 	router.HandleFunc("GET /jobs/active", serviceHandler.HandleActiveJobs)
@@ -66,17 +67,19 @@ func main() {
 	router.HandleFunc("GET /jobs/download", serviceHandler.HandleDownload)
 	router.HandleFunc("GET /instances/get", serviceHandler.HandleGetInstances)
 
-	router.HandleFunc("POST /users", userHandler.HandleCreateUser)
-	router.HandleFunc("PUT /users", userHandler.HandleUpdateUser)
-	router.HandleFunc("DELETE /users", userHandler.HandleDeleteUser)
-	router.HandleFunc("GET /users/id", userHandler.HandleGetUserByID)
-	router.HandleFunc("GET /users/email", userHandler.HandleGetUserByEmail)
-	router.HandleFunc("GET /users/username", userHandler.HandleGetUserByUsername)
+	router.Handle("POST /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleCreateUser)))
+	router.Handle("PUT /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleUpdateUser)))
+	router.Handle("DELETE /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleDeleteUser)))
+	router.Handle("GET /users/id", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByID)))
+	router.Handle("GET /users/email", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByEmail)))
+	router.Handle("GET /users/username", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByUsername)))
 
 	server := http.Server{
-		Addr:        ":8080",
+		Addr:        cfg.HTTPServer.Address,
 		Handler:     router,
-		ReadTimeout: time.Duration(time.Second * 20),
+		ReadTimeout: time.Duration(cfg.HTTPServer.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(cfg.HTTPServer.WriteTimeout) * time.Second,
+		IdleTimeout: time.Duration(cfg.HTTPServer.IdleTimeout) * time.Second,
 	}
 
 	notifyChan := make(chan os.Signal, 1)

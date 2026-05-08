@@ -12,9 +12,9 @@ type Config struct {
 
 	HTTPServer struct {
 		Address         string `yaml:"address" env:"HTTP_ADDRESS" env-default:"localhost:8080"`
-		ReadTimeout     string `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20s"`
-		WriteTimeout    string `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20s"`
-		ShutdownTimeout string `yaml:"shutdown_timeout" env:"HTTP_SHUTDOWN_TIMEOUT" env-default:"5s"`
+		ReadTimeout     int `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20"`
+		WriteTimeout    int `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20"`
+		IdleTimeout int `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"20"`
 	} `yaml:"http_server"`
 
 	Workers struct {

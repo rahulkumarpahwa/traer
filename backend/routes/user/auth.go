@@ -3,9 +3,9 @@ package user
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"github.com/rahulkumarpahwa/traer/auth"
 	"github.com/rahulkumarpahwa/traer/utils"
+	"net/http"
 )
 
 func (u *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
@@ -21,7 +21,8 @@ func (u *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Parse and Valid Token:
-		claims, err := auth.ParseAndValidateToken(cookie, u.Config)
+		auth := auth.Auth{}
+		claims, err := auth.ParseAndValidateToken(cookie)
 		if err != nil {
 			utils.ErrorResponse(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired token"))
 			return

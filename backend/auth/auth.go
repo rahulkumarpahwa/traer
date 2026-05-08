@@ -18,9 +18,18 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+type Auth struct {
+	Config *config.Config
+}
+
 func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
 	if user == nil || config == nil {
 		return nil, fmt.Errorf("User or Config missing to generate token!")
+	}
+
+	// Setting up the config in the Auth
+	auth := Auth{
+		Config: config,
 	}
 
 	claims := &Claims{
@@ -34,7 +43,7 @@ func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(config.Jwt.Secret)
+	tokenString, err := token.SignedString(auth.Config.Jwt.Secret)
 	if err != nil {
 		return nil, nil
 	}
@@ -42,7 +51,7 @@ func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
 	return &tokenString, nil
 }
 
-func ParseAndValidateToken(cookie *http.Cookie, config *config.Config) (*Claims, error) {
+func (a *Auth) ParseAndValidateToken(cookie *http.Cookie) (*Claims, error) {
 	// Parse and validate token
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(cookie.Value, claims, func(token *jwt.Token) (interface{}, error) {
@@ -50,7 +59,7 @@ func ParseAndValidateToken(cookie *http.Cookie, config *config.Config) (*Claims,
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method")
 		}
-		return config.Jwt.Secret, nil
+		return a.Config.Jwt.Secret, nil
 	})
 	if err != nil || !token.Valid {
 		return nil, err
