@@ -3,9 +3,9 @@ package user
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"github.com/rahulkumarpahwa/traer/auth"
 	"github.com/rahulkumarpahwa/traer/utils"
-	"net/http"
 )
 
 func (u *UserHandler) AuthMiddleware(next http.Handler) http.Handler {

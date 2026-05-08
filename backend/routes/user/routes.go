@@ -23,8 +23,8 @@ type UserHandler struct {
 
 // CreateUserRequest represents the JSON body for creating a user
 type CreateUserRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
+	Username string `json:"username,omitempty"`
+	Email    string `json:"email,omitempty"`
 	Password string `json:"password"`
 }
 
@@ -40,6 +40,7 @@ type LoginRequest struct {
 	Email    string `json:"email,omitempty"`
 	Password string `json:"password"`
 }
+
 
 // HandleLogin handles POST /login
 func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -131,8 +132,9 @@ func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if req.Username == "" || req.Email == "" || req.Password == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("username, email, and password are required"))
+	// Validate input: must have password and either username or email
+	if req.Password == "" || (req.Username == "" && req.Email == "") {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("must provide either username+password or email+password"))
 		return
 	}
 
@@ -141,7 +143,7 @@ func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	utils.JSONResponse(w, http.StatusCreated, map[string]string{"message": "User created successfully"})
+	utils.JSONResponse(w, http.StatusCreated, map[string]string{"message": "User Signup successfully"})
 }
 
 // HandleUpdateUser handles PUT /users?id=123
