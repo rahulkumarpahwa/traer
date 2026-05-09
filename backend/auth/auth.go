@@ -7,7 +7,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rahulkumarpahwa/traer/config"
-	"github.com/rahulkumarpahwa/traer/types"
+	uTypes "github.com/rahulkumarpahwa/traer/types/user"
 )
 
 // Claims defines the JWT payload
@@ -22,7 +22,7 @@ type Auth struct {
 	Config *config.Config
 }
 
-func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
+func GenerateJWT(user *uTypes.User, config *config.Config) (*string, error) {
 	if user == nil || config == nil {
 		return nil, fmt.Errorf("User or Config missing to generate token!")
 	}

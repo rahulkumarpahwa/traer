@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	"github.com/rahulkumarpahwa/traer/config"
-	"github.com/rahulkumarpahwa/traer/types"
+	jTypes "github.com/rahulkumarpahwa/traer/types/job"
 	"github.com/rahulkumarpahwa/traer/utils"
 )
 
@@ -21,19 +21,19 @@ type JobWorker struct {
 	startOnce       sync.Once
 	Config          *config.Config
 	ExecutablePaths map[string]string
-	JobsMu sync.RWMutex
+	JobsMu          sync.RWMutex
 }
 
-var jobQueue = make(chan *types.Job, 100)
+var jobQueue = make(chan *jTypes.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
-var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
+var Jobs = make(map[string]*jTypes.Job) // to store the jobs and fetch later with the id.
 
-func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Job {
-	job := &types.Job{
+func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.Job {
+	job := &jTypes.Job{
 		ID:     utils.GenerateID(),
 		URL:    url,
-		Status: types.StatusQueued,
+		Status: jTypes.StatusQueued,
 		Type:   contentType,
 	}
 	jw.JobsMu.Lock()
@@ -45,14 +45,14 @@ func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Jo
 	case jobQueue <- job:
 		// ok
 	default:
-		job.Status = types.StatusFailed
+		job.Status = jTypes.StatusFailed
 		job.Error = "queue full"
 	}
 
 	return job
 }
 
-func (jw *JobWorker) GetJob(id string) *types.Job {
+func (jw *JobWorker) GetJob(id string) *jTypes.Job {
 	jw.JobsMu.RLock()
 	job := Jobs[id]
 	jw.JobsMu.RUnlock()
@@ -77,15 +77,15 @@ func (jw *JobWorker) worker() {
 	}
 }
 
-func (jw *JobWorker) processJob(job *types.Job) {
+func (jw *JobWorker) processJob(job *jTypes.Job) {
 	job.MU.Lock()
-	job.Status = types.StatusRunning
+	job.Status = jTypes.StatusRunning
 	job.MU.Unlock()
 
 	cmd := jw.buildCommand(job)
 	if cmd == nil {
 		job.MU.Lock()
-		job.Status = types.StatusFailed
+		job.Status = jTypes.StatusFailed
 		job.Error = "invalid job type"
 		job.MU.Unlock()
 		return
@@ -94,7 +94,7 @@ func (jw *JobWorker) processJob(job *types.Job) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		job.MU.Lock()
-		job.Status = types.StatusFailed
+		job.Status = jTypes.StatusFailed
 		job.Error = err.Error()
 		job.MU.Unlock()
 		return
@@ -102,7 +102,7 @@ func (jw *JobWorker) processJob(job *types.Job) {
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		job.MU.Lock()
-		job.Status = types.StatusFailed
+		job.Status = jTypes.StatusFailed
 		job.Error = err.Error()
 		job.MU.Unlock()
 		return
@@ -110,7 +110,7 @@ func (jw *JobWorker) processJob(job *types.Job) {
 
 	if err := cmd.Start(); err != nil {
 		job.MU.Lock()
-		job.Status = types.StatusFailed
+		job.Status = jTypes.StatusFailed
 		job.Error = err.Error()
 		job.MU.Unlock()
 		return
@@ -130,7 +130,7 @@ func (jw *JobWorker) processJob(job *types.Job) {
 	err = cmd.Wait()
 	if err != nil {
 		job.MU.Lock()
-		job.Status = types.StatusFailed
+		job.Status = jTypes.StatusFailed
 		job.Error = err.Error()
 		job.MU.Unlock()
 		return
@@ -146,12 +146,12 @@ func (jw *JobWorker) processJob(job *types.Job) {
 
 	job.MU.Lock()
 	job.Progress = 100
-	job.Status = types.StatusDone
+	job.Status = jTypes.StatusDone
 	fmt.Printf("[job] Job %s done. Output: %s\n", job.ID, job.Output)
 	job.MU.Unlock()
 }
 
-func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
+func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
 	baseArgs := []string{
 		"--newline",
 		"--progress",
@@ -171,7 +171,7 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 
 	ffmpegLocation := filepath.Dir(ffmpegPath)
 
-	if job.Type == types.AudioContent {
+	if job.Type == jTypes.AudioContent {
 		args := append([]string{
 			"-f", "bestaudio",
 			"-x",
@@ -185,7 +185,7 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 		return exec.Command(ytDlpPath, args...)
 	}
 
-	if job.Type == types.VideoContent {
+	if job.Type == jTypes.VideoContent {
 		args := append([]string{
 			"-f", "bv*+ba/best",
 			"--merge-output-format", "mp4",
@@ -202,7 +202,7 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 	return nil
 }
 
-func parseOutput(pipe io.ReadCloser, job *types.Job) {
+func parseOutput(pipe io.ReadCloser, job *jTypes.Job) {
 	scanner := bufio.NewScanner(pipe)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)

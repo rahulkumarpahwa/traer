@@ -2,7 +2,6 @@ package types
 
 import (
 	"sync"
-	"time"
 )
 
 type JobStatus string
@@ -30,13 +29,4 @@ type Job struct {
 	Output   string
 	Error    string
 	MU       sync.Mutex
-}
-
-type User struct {
-	ID           int        `json:"id"`
-	Username     string     `json:"username"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"password_hash"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    *time.Time `json:"updated_at"`
 }

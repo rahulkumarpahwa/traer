@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rahulkumarpahwa/traer/types"
+	uTypes "github.com/rahulkumarpahwa/traer/types/user"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -17,9 +17,9 @@ type UserStorageInterface interface {
 	CreateUser(username, email, password string) error
 	UpdateUserByID(id int, username, password string) error
 	DeleteUserByID(id int) error
-	GetUserByID(id int) (*types.User, error)
-	GetUserByEmail(email string) (*types.User, error)
-	GetUserByUsername(username string) (*types.User, error)
+	GetUserByID(id int) (*uTypes.User, error)
+	GetUserByEmail(email string) (*uTypes.User, error)
+	GetUserByUsername(username string) (*uTypes.User, error)
 }
 
 func (u *UserStorage) CreateUser(username, email, password string) error {
@@ -127,7 +127,7 @@ func (u *UserStorage) DeleteUserByID(id int) error {
 }
 
 // GetUserByID retrieves a user by ID
-func (u *UserStorage) GetUserByID(id int) (*types.User, error) {
+func (u *UserStorage) GetUserByID(id int) (*uTypes.User, error) {
 	if id <= 0 {
 		return nil, fmt.Errorf("invalid user ID")
 	}
@@ -138,7 +138,7 @@ func (u *UserStorage) GetUserByID(id int) (*types.User, error) {
 	}
 	defer stmt.Close()
 
-	var user types.User
+	var user uTypes.User
 	err = stmt.QueryRow(id).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil // No user found
@@ -150,7 +150,7 @@ func (u *UserStorage) GetUserByID(id int) (*types.User, error) {
 }
 
 // GetUserByEmail retrieves a user by email
-func (u *UserStorage) GetUserByEmail(email string) (*types.User, error) {
+func (u *UserStorage) GetUserByEmail(email string) (*uTypes.User, error) {
 	if email == "" {
 		return nil, fmt.Errorf("email cannot be empty")
 	}
@@ -161,7 +161,7 @@ func (u *UserStorage) GetUserByEmail(email string) (*types.User, error) {
 	}
 	defer stmt.Close()
 
-	var user types.User
+	var user uTypes.User
 	err = stmt.QueryRow(email).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -173,7 +173,7 @@ func (u *UserStorage) GetUserByEmail(email string) (*types.User, error) {
 }
 
 // GetUserByUsername retrieves a user by username
-func (u *UserStorage) GetUserByUsername(username string) (*types.User, error) {
+func (u *UserStorage) GetUserByUsername(username string) (*uTypes.User, error) {
 	if username == "" {
 		return nil, fmt.Errorf("username cannot be empty")
 	}
@@ -184,7 +184,7 @@ func (u *UserStorage) GetUserByUsername(username string) (*types.User, error) {
 	}
 	defer stmt.Close()
 
-	var user types.User
+	var user uTypes.User
 	err = stmt.QueryRow(username).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil

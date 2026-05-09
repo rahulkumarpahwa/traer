@@ -10,7 +10,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/auth"
 	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/storage"
-	"github.com/rahulkumarpahwa/traer/types"
+	uTypes "github.com/rahulkumarpahwa/traer/types/user"
 	"github.com/rahulkumarpahwa/traer/utils"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -80,7 +80,7 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Type assert to *types.User
-	user, ok := userObj.(*types.User) // Replace with actual type, e.g., *types.User
+	user, ok := userObj.(*uTypes.User) // Replace with actual type, e.g., *types.User
 	if !ok {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("internal type assertion error"))
 		return

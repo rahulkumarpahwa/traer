@@ -10,13 +10,13 @@ import (
 
 	"github.com/rahulkumarpahwa/traer/job"
 	"github.com/rahulkumarpahwa/traer/storage"
-	"github.com/rahulkumarpahwa/traer/types"
+	jTypes "github.com/rahulkumarpahwa/traer/types/job"
 	"github.com/rahulkumarpahwa/traer/utils"
 	"github.com/rahulkumarpahwa/traer/validators"
 )
-  
+
 type ServiceHandler struct {
-	JW *job.JobWorker
+	JW          *job.JobWorker
 	UserStorage storage.UserStorageInterface
 }
 
@@ -42,13 +42,13 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var contentType types.ContentType
+	var contentType jTypes.ContentType
 
 	switch strings.ToLower(req.Type) {
 	case "audio":
-		contentType = types.AudioContent
+		contentType = jTypes.AudioContent
 	case "video":
-		contentType = types.VideoContent
+		contentType = jTypes.VideoContent
 	default:
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid type"))
 		return
@@ -60,12 +60,12 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 }
 
 func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Request) {
-	var activeJobs []*types.Job
+	var activeJobs []*jTypes.Job
 
 	hs.JW.JobsMu.RLock()
 	for _, j := range job.Jobs {
 		j.MU.Lock()
-		if j.Status == types.StatusQueued || j.Status == types.StatusRunning {
+		if j.Status == jTypes.StatusQueued || j.Status == jTypes.StatusRunning {
 			activeJobs = append(activeJobs, j)
 		}
 		j.MU.Unlock()
@@ -120,7 +120,7 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 
 	fmt.Printf("[download] Attempting to download job with id: %s\n", id)
 
-	j :=  hs.JW.GetJob(id)
+	j := hs.JW.GetJob(id)
 	if j == nil {
 		fmt.Printf("[download] Job not found with id: %s\n", id)
 		hs.JW.JobsMu.RLock()
@@ -140,7 +140,7 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 
 	fmt.Printf("[download] Job found: status=%s, output=%s\n", status, outputPath)
 
-	if status != types.StatusDone {
+	if status != jTypes.StatusDone {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
 		return
 	}
