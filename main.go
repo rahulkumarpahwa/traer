@@ -1,35 +1,33 @@
 package main
 
 import (
-	"embed"
+	"flag"
+	"fmt"
+	"os"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-//go:embed all:frontend/dist
-var assets embed.FS
-
 func main() {
-	app := NewApp()
+	backendURL := flag.String("backend", envOr("TRAER_BACKEND_URL", "http://localhost:8080"), "Traer backend base URL")
+	flag.Parse()
 
-	err := wails.Run(&options.App{
-		Title:     "traer",
-		Width:     1400,
-		Height:    920,
-		MinWidth:  1100,
-		MinHeight: 760,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 8, G: 12, B: 24, A: 1},
-		OnStartup:        app.startup,
-		Bind: []interface{}{
-			app,
-		},
-	})
-	if err != nil {
-		println("Error:", err.Error())
+	client := NewClient(*backendURL)
+
+	program := tea.NewProgram(
+		newModel(client),
+		tea.WithAltScreen(),
+	)
+
+	if _, err := program.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "traer: failed to run TUI:", err)
+		os.Exit(1)
 	}
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

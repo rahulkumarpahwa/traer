@@ -32,9 +32,12 @@ services:
       - ./backend/database:/app/database
     networks:
       - nextcloud_net
-    # No "ports:" section on purpose: the service is reachable only from within
-    # the Docker network (e.g. by your reverse proxy), never from the host/public
-    # internet. This keeps the internal API and job queue private.
+    # The TUI runs on the host and talks to this backend over HTTP. Publish the
+    # port on the loopback interface ONLY (127.0.0.1) so the host-side TUI can
+    # reach it while the API is never exposed to the public internet. Do not
+    # change this to 0.0.0.0 / a bare port mapping.
+    ports:
+      - "127.0.0.1:8080:8080"
 
 networks:
   # Reuses the existing external network created by the Nextcloud stack so the
