@@ -1,0 +1,43 @@
+# Traer backend — YouTube → Nextcloud music pipeline.
+#
+# The backend runs on the internal Nextcloud network so it can reach Nextcloud's
+# WebDAV endpoint without exposing any internal ports to the public internet.
+# Credentials are supplied via environment variables (see .env.example) and are
+# never written into the image or logs.
+services:
+  traer-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: traer-backend:latest
+    container_name: traer-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Bind inside the container; no host port is published.
+      HTTP_ADDRESS: "0.0.0.0:8080"
+      DOWNLOAD_PATH: "downloads/"
+      DB_PATH: "database/database.db"
+      # Nextcloud WebDAV destination. Use a Nextcloud app password, not your
+      # account password. When running on the shared Docker network you can
+      # point NEXTCLOUD_URL at the internal service, e.g. http://app:80.
+      NEXTCLOUD_URL: "${NEXTCLOUD_URL:-http://app:80}"
+      NEXTCLOUD_USERNAME: "${NEXTCLOUD_USERNAME:?set NEXTCLOUD_USERNAME in .env}"
+      NEXTCLOUD_APP_PASSWORD: "${NEXTCLOUD_APP_PASSWORD:?set NEXTCLOUD_APP_PASSWORD in .env}"
+      NEXTCLOUD_BASE_PATH: "${NEXTCLOUD_BASE_PATH:-Music/Downloads}"
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
+    volumes:
+      - ./backend/downloads:/app/downloads
+      - ./backend/database:/app/database
+    networks:
+      - nextcloud_net
+    # No "ports:" section on purpose: the service is reachable only from within
+    # the Docker network (e.g. by your reverse proxy), never from the host/public
+    # internet. This keeps the internal API and job queue private.
+
+networks:
+  # Reuses the existing external network created by the Nextcloud stack so the
+  # backend can talk to Nextcloud's WebDAV over the internal network.
+  nextcloud_net:
+    external: true

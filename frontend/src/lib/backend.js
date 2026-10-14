@@ -11,6 +11,7 @@ function labelForKind(kind) {
     transcribe: "Transcript",
     audio: "Audio package",
     video: "Video export",
+    music: "Music track",
     cloud: "Cloud sync",
   };
 
@@ -118,6 +119,8 @@ function mapBackendJob(job, fallbackOption = "") {
     downloadUrl: buildDownloadUrl(job.id),
     sourceUrl: job.url ?? "",
     createdAt: job.createdAt ?? new Date().toISOString(),
+    uploaded: Boolean(job.uploaded),
+    uploadError: job.uploadError ?? "",
     source: "backend",
   };
 }
@@ -342,4 +345,73 @@ export async function downloadJobFile(id, fileName = "traer-output") {
   document.body.removeChild(link);
   window.URL.revokeObjectURL(objectUrl);
   return fileName;
+}
+
+// splitUrls turns a free-form blob of text (newlines, commas, spaces) into a
+// de-duplicated list of trimmed URLs while preserving order.
+export function splitUrls(text) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of String(text ?? "").split(/[\s,]+/)) {
+    const url = raw.trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
+// createMusicJobs queues one or more YouTube/YouTube Music URLs for audio
+// extraction and upload to the user's Nextcloud Music folder. Returns an array
+// of normalized job objects (one per accepted URL).
+export async function createMusicJobs(urls) {
+  const clean = splitUrls(Array.isArray(urls) ? urls.join("\n") : urls);
+  if (clean.length === 0) {
+    throw new Error("Add at least one YouTube or YouTube Music link.");
+  }
+
+  const api = getWailsApp();
+  if (api?.CreateMusicJobs) {
+    const jobs = await api.CreateMusicJobs(clean);
+    return (jobs ?? []).map((job) => ({
+      ...job,
+      kind: job.kind ?? "music",
+      option: job.option ?? "MP3",
+      createdAt: job.createdAt ?? new Date().toISOString(),
+      source: "backend",
+    }));
+  }
+
+  const data = await backendFetch("/jobs/create", {
+    method: "POST",
+    body: JSON.stringify({ urls: clean, type: "music" }),
+  });
+
+  // Backend returns the full list under "jobs" for batches, or a single job
+  // object when only one URL was accepted.
+  const list = Array.isArray(data?.jobs) ? data.jobs : data?.id ? [data] : [];
+  const now = new Date();
+  return list.map((job) => ({
+    ...mapBackendJob(job, "MP3"),
+    kind: "music",
+    title: `${labelForKind("music")} queued`,
+    message: `${labelForKind("music")} for ${job.url ?? ""} is queued for Nextcloud upload.`,
+    option: "MP3",
+    createdAt: now.toISOString(),
+    source: "backend",
+  }));
+}
+
+// retryJob re-queues a previously failed job.
+export async function retryJob(id) {
+  const api = getWailsApp();
+  if (api?.RetryJob) {
+    const job = await api.RetryJob(id);
+    return { ...job, source: "backend" };
+  }
+
+  const job = await backendFetch(`/jobs/retry?id=${encodeURIComponent(id)}`, {
+    method: "POST",
+  });
+  return mapBackendJob(job);
 }

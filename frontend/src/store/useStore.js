@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import {
+  createMusicJobs,
   downloadJobFile,
   getActiveJobs,
   getInitialState,
@@ -8,6 +9,7 @@ import {
   getProfile,
   getUserById,
   login,
+  retryJob,
   saveSettings,
   signup,
   startJob,
@@ -368,6 +370,105 @@ export const useStore = create((set, get) => ({
   saveDownloadedJob: async (job) => {
     const savedTo = await downloadJobFile(job.id, job.fileName || job.title);
     return savedTo;
+  },
+  runMusicJobs: async (input) => {
+    const urls = Array.isArray(input)
+      ? input
+      : String(input ?? "")
+          .split(/[\s,]+/)
+          .map((value) => value.trim())
+          .filter(Boolean);
+
+    // Collapse duplicates within the submission and skip links already tracked
+    // as a queued/running/uploading/done backend job to avoid re-downloading.
+    const existing = new Set(
+      get()
+        .activeJobs.filter(
+          (job) =>
+            job.kind === "music" &&
+            job.source === "backend" &&
+            ["queued", "running", "uploading", "done"].includes(job.status),
+        )
+        .map((job) => job.sourceUrl),
+    );
+
+    const unique = [];
+    const seen = new Set();
+    for (const url of urls) {
+      if (seen.has(url) || existing.has(url)) continue;
+      seen.add(url);
+      unique.push(url);
+    }
+
+    if (unique.length === 0) {
+      get().addNotification({
+        tone: "warning",
+        title: "Nothing to queue",
+        message: existing.size
+          ? "Those links are already queued or completed."
+          : "Add one or more YouTube or YouTube Music links first.",
+      });
+      return [];
+    }
+
+    unique.forEach((url) => {
+      get().addLink(url);
+      get().addTerminalLine(`[music] queued for Nextcloud upload: ${url}`);
+    });
+
+    const created = await createMusicJobs(unique);
+
+    set((state) => ({
+      activeJobs: mergeJobs(
+        state.activeJobs,
+        created.map((job) => ({
+          ...job,
+          progress: Number(job.progress ?? 5),
+          status: job.status ?? "queued",
+        })),
+      ).slice(0, 24),
+    }));
+
+    get().addNotification({
+      tone: "info",
+      title: `${created.length} music ${created.length === 1 ? "track" : "tracks"} queued`,
+      message: "Audio will be extracted to MP3 and uploaded to your Nextcloud Music folder.",
+    });
+
+    await get().refreshActiveJobs();
+    return created;
+  },
+  retryJob: async (job) => {
+    try {
+      const updated = await retryJob(job.id);
+      set((state) => ({
+        activeJobs: mergeJobs(state.activeJobs, [
+          {
+            ...job,
+            ...updated,
+            status: updated.status ?? "queued",
+            progress: 0,
+            error: "",
+            uploadError: "",
+            uploaded: false,
+            source: "backend",
+          },
+        ]),
+      }));
+      get().addTerminalLine(`[retry] re-queued ${job.id}`);
+      get().addNotification({
+        tone: "info",
+        title: "Retrying job",
+        message: updated.message ?? "The job has been re-queued.",
+      });
+      await get().refreshActiveJobs();
+    } catch (error) {
+      get().addNotification({
+        tone: "warning",
+        title: "Retry failed",
+        message: error?.message ?? "Unable to retry this job.",
+      });
+    }
   },
   actionOptions,
 }));

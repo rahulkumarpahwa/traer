@@ -1,0 +1,51 @@
+name: traer-backend
+env: production
+
+http_server:
+  address: "0.0.0.0:8080"
+  read_timeout: 60
+  write_timeout: 3600
+  idle_timeout: 120
+
+workers:
+  instances: 2
+  queue_size: 100
+
+jobs:
+  max_duration: "30m"
+  cleanup_interval: "10m"
+  retention_time: "1h"
+
+storage:
+  download_path: "downloads/"
+  max_file_size_mb: 1024
+  auto_cleanup: true
+
+# External tools required by the worker (resolved from PATH or installed on demand).
+executables:
+  required:
+    - yt-dlp
+    - ffmpeg
+
+database:
+  path: "database/database.db"
+
+logging:
+  level: "info"
+  format: "text"
+
+# JWT secret for signing session cookies. MUST be overridden via the JWT_SECRET
+# environment variable in any real deployment. Never commit a real secret.
+jwt:
+  secret: "change-me"
+
+# Nextcloud WebDAV target for the music pipeline. These values are read from the
+# environment (NEXTCLOUD_URL, NEXTCLOUD_USERNAME, NEXTCLOUD_APP_PASSWORD,
+# NEXTCLOUD_BASE_PATH) and are NEVER exposed to the frontend or written to logs.
+# Use a Nextcloud *app password* (Settings -> Security -> Devices & sessions),
+# not your account password.
+nextcloud:
+  url: "https://cloud.example.com"
+  username: "your-nextcloud-user"
+  app_password: "your-app-password"
+  base_path: "Music/Downloads"

@@ -34,6 +34,17 @@ type Config struct {
 		AutoCleanup  bool   `yaml:"auto_cleanup" env:"AUTO_CLEANUP" env-default:"true"`
 	} `yaml:"storage"`
 
+	// Nextcloud holds the credentials and destination used by the music
+	// pipeline to upload finished MP3 files over WebDAV. These values are read
+	// from environment variables (or a git-ignored local config) and are never
+	// exposed to the frontend or written to logs.
+	Nextcloud struct {
+		URL         string `yaml:"url" env:"NEXTCLOUD_URL"`
+		Username    string `yaml:"username" env:"NEXTCLOUD_USERNAME"`
+		AppPassword string `yaml:"app_password" env:"NEXTCLOUD_APP_PASSWORD"`
+		BasePath    string `yaml:"base_path" env:"NEXTCLOUD_BASE_PATH" env-default:"Music/Downloads"`
+	} `yaml:"nextcloud"`
+
 	Executables struct {
 		Required []string `yaml:"required"`
 	} `yaml:"executables"`
@@ -50,6 +61,12 @@ type Config struct {
 	Jwt struct {
 		Secret string `yaml:"secret" env:"JWT_SECRET"`
 	} `yaml:"jwt"`
+}
+
+// Configured reports whether the Nextcloud integration has the minimum required
+// settings to attempt an upload.
+func (c *Config) NextcloudConfigured() bool {
+	return c.Nextcloud.URL != "" && c.Nextcloud.Username != "" && c.Nextcloud.AppPassword != ""
 }
 
 // ResolveExecutables resolves all required executables and returns a map of tool names to paths.

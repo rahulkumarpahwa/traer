@@ -4,6 +4,7 @@ import {
   CloudUpload,
   FileAudio2,
   FileText,
+  Music4,
   Search,
   Video,
 } from "lucide-react";
@@ -42,6 +43,20 @@ export default function Dashboard() {
   const selectedOptions = useStore((state) => state.selectedOptions);
   const setOption = useStore((state) => state.setOption);
   const runJob = useStore((state) => state.runJob);
+  const runMusicJobs = useStore((state) => state.runMusicJobs);
+  const addNotification = useStore((state) => state.addNotification);
+
+  const handleMusic = async () => {
+    try {
+      await runMusicJobs(url);
+    } catch (error) {
+      addNotification({
+        tone: "warning",
+        title: "Music queue failed",
+        message: error?.message ?? "Unable to queue the music job.",
+      });
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -57,19 +72,50 @@ export default function Dashboard() {
             <div className="w-full max-w-5xl rounded-[36px] border border-emerald-500/12 bg-white/82 p-8 shadow-[0_30px_90px_-45px_rgba(5,46,22,0.45)] backdrop-blur-sm dark:border-emerald-400/10 dark:bg-[#07150f]/90 dark:shadow-[0_30px_90px_-45px_rgba(16,185,129,0.28)] md:p-10">
 
               <div className="mx-auto  max-w-3xl">
-                <div className="flex items-center gap-4 rounded-[28px] border border-emerald-500/12 bg-white px-5 py-4 shadow-sm shadow-emerald-950/5 dark:border-emerald-400/10 dark:bg-[#0a1912]">
+                <div className="flex items-start gap-4 rounded-[28px] border border-emerald-500/12 bg-white px-5 py-4 shadow-sm shadow-emerald-950/5 dark:border-emerald-400/10 dark:bg-[#0a1912]">
                   <Search
-                    className="h-5 w-5 shrink-0 text-slate-400 dark:text-emerald-100/35"
+                    className="mt-2 h-5 w-5 shrink-0 text-slate-400 dark:text-emerald-100/35"
                     strokeWidth={1.8}
                   />
-                  <input
+                  <textarea
                     id="source-url"
-                    className="w-full bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 dark:text-emerald-50 dark:placeholder:text-emerald-100/35"
-                    placeholder="Youtube URL"
+                    rows={3}
+                    className="w-full resize-y bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 dark:text-emerald-50 dark:placeholder:text-emerald-100/35"
+                    placeholder="Paste one or more YouTube / YouTube Music links (one per line)"
                     value={url}
                     onChange={(event) => setUrl(event.target.value)}
                   />
                 </div>
+                <p className="mt-2 px-1 text-xs text-slate-500 dark:text-emerald-100/55">
+                  Only download content you own or are authorized to use.
+                </p>
+              </div>
+
+              <div className="mx-auto mt-6 max-w-4xl">
+                <button
+                  type="button"
+                  onClick={handleMusic}
+                  disabled={!hydrated}
+                  className="group flex w-full items-center justify-between gap-4 rounded-[28px] border border-emerald-500/25 bg-emerald-500/[0.08] px-5 py-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-500/40 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06] dark:hover:bg-white/[0.05]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-500 text-emerald-700 shadow-inner shadow-white/50 dark:border-emerald-400 dark:bg-[#102118] dark:text-emerald-200 dark:shadow-none">
+                      <Music4 className="h-5 w-5" strokeWidth={1.6} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900 dark:text-emerald-50">
+                        Music → Nextcloud
+                      </h2>
+                      <p className="text-sm text-slate-600 dark:text-emerald-100/65">
+                        Extract MP3 audio from every link above and upload it to your Nextcloud Music folder.
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowUpRight
+                    className="h-5 w-5 shrink-0 text-slate-400 transition group-hover:text-emerald-600 dark:text-emerald-100/35 dark:group-hover:text-emerald-200"
+                    strokeWidth={1.8}
+                  />
+                </button>
               </div>
 
               <div className="mx-auto mt-8 grid max-w-4xl gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -77,7 +123,7 @@ export default function Dashboard() {
                   <button
                     key={kind}
                     className="group flex items-center justify-between gap-4 rounded-[28px] border border-emerald-500/12 bg-emerald-500/[0.05] px-5 py-5 text-left transition hover:-translate-y-1 hover:border-emerald-500/25 hover:bg-white dark:border-emerald-400/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-45"
-                    onClick={() => runJob({ kind, url })}
+                    onClick={() => runJob({ kind, url: url.split(/[\s,]+/).filter(Boolean)[0] ?? "" })}
                     disabled={!hydrated}
                   >
                     <div className="flex items-center justify-center gap-2  p-2">

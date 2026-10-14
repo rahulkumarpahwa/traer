@@ -94,7 +94,7 @@ func testAllRoutes() {
 	fmt.Println("\n🔟 Testing GET /instances/get (Get Instances)")
 	testInstancesGet(client, baseURL, token)
 
-	fmt.Println("\n✅ All route tests completed!\n")
+	fmt.Println("\n✅ All route tests completed!")
 }
 
 func testHealthCheck(client *http.Client, baseURL string) {

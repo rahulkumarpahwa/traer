@@ -20,9 +20,9 @@ import (
 const backendBaseURL = "http://localhost:8080"
 
 type App struct {
-	ctx          context.Context
-	httpClient   *http.Client
-	settings     SettingsPayload
+	ctx           context.Context
+	httpClient    *http.Client
+	settings      SettingsPayload
 	currentUserID int
 }
 
@@ -76,9 +76,10 @@ type Profile struct {
 }
 
 type StartJobPayload struct {
-	URL    string `json:"url"`
-	Kind   string `json:"kind"`
-	Option string `json:"option"`
+	URL    string   `json:"url"`
+	URLs   []string `json:"urls,omitempty"`
+	Kind   string   `json:"kind"`
+	Option string   `json:"option"`
 }
 
 type JobResponse struct {
@@ -95,16 +96,20 @@ type JobResponse struct {
 	FileName    string   `json:"fileName,omitempty"`
 	DownloadURL string   `json:"downloadUrl,omitempty"`
 	SourceURL   string   `json:"sourceUrl,omitempty"`
+	Uploaded    bool     `json:"uploaded,omitempty"`
+	UploadError string   `json:"uploadError,omitempty"`
 }
 
 type backendJob struct {
-	ID       string  `json:"id"`
-	URL      string  `json:"url"`
-	Type     string  `json:"type"`
-	Status   string  `json:"status"`
-	Progress float64 `json:"progress"`
-	Output   string  `json:"output"`
-	Error    string  `json:"error"`
+	ID          string  `json:"id"`
+	URL         string  `json:"url"`
+	Type        string  `json:"type"`
+	Status      string  `json:"status"`
+	Progress    float64 `json:"progress"`
+	Output      string  `json:"output"`
+	Error       string  `json:"error"`
+	Uploaded    bool    `json:"uploaded"`
+	UploadError string  `json:"uploadError"`
 }
 
 type backendUser struct {
@@ -230,12 +235,13 @@ func (a *App) GetUserByID(id int) (User, error) {
 }
 
 func (a *App) StartJob(payload StartJobPayload) JobResponse {
-	if payload.Kind != "audio" && payload.Kind != "video" {
+	if payload.Kind != "audio" && payload.Kind != "video" && payload.Kind != "music" {
 		return a.makeLocalPlaceholderJob(payload)
 	}
 
-	reqBody, _ := json.Marshal(map[string]string{
+	reqBody, _ := json.Marshal(map[string]interface{}{
 		"url":  payload.URL,
+		"urls": payload.URLs,
 		"type": payload.Kind,
 	})
 
@@ -291,6 +297,89 @@ func (a *App) GetJobStatus(id string) JobResponse {
 		}
 	}
 
+	return mapBackendJobToFrontend(job)
+}
+
+// CreateMusicJobs queues one or more YouTube/YouTube Music URLs for audio
+// extraction and upload to Nextcloud. It returns one JobResponse per accepted
+// URL so the UI can track each download independently.
+func (a *App) CreateMusicJobs(urls []string) []JobResponse {
+	clean := make([]string, 0, len(urls))
+	seen := map[string]bool{}
+	for _, u := range urls {
+		u = strings.TrimSpace(u)
+		if u == "" || seen[u] {
+			continue
+		}
+		seen[u] = true
+		clean = append(clean, u)
+	}
+
+	if len(clean) == 0 {
+		return []JobResponse{}
+	}
+
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"urls": clean,
+		"type": "music",
+	})
+
+	var batch struct {
+		ID     string       `json:"id"`
+		Status string       `json:"status"`
+		Jobs   []backendJob `json:"jobs"`
+	}
+	if err := a.doBackendJSON(http.MethodPost, "/jobs/create", bytes.NewReader(reqBody), &batch); err != nil {
+		return []JobResponse{a.makeErrorJob(StartJobPayload{Kind: "music", URLs: clean}, err)}
+	}
+
+	jobs := batch.Jobs
+	if len(jobs) == 0 {
+		// Backend returns a single job object when only one URL was accepted.
+		var single backendJob
+		if err := a.doBackendJSON(http.MethodPost, "/jobs/create", bytes.NewReader(reqBody), &single); err == nil && single.ID != "" {
+			jobs = []backendJob{single}
+		}
+	}
+
+	now := time.Now()
+	responses := make([]JobResponse, 0, len(jobs))
+	for _, j := range jobs {
+		responses = append(responses, JobResponse{
+			ID:          j.ID,
+			Kind:        "music",
+			Option:      "MP3",
+			Title:       "Music queued",
+			Message:     fmt.Sprintf("Audio for %s is queued for Nextcloud upload.", j.URL),
+			CreatedAt:   now.Format(time.RFC3339),
+			Status:      j.Status,
+			Progress:    j.Progress,
+			Output:      j.Output,
+			FileName:    fileNameFromOutput(j.Output),
+			DownloadURL: buildDownloadURL(j.ID),
+			SourceURL:   j.URL,
+			Uploaded:    j.Uploaded,
+			UploadError: j.UploadError,
+			Logs: []string{
+				fmt.Sprintf("[%s] music job accepted", now.Format("15:04:05")),
+				fmt.Sprintf("[%s] source queued: %s", now.Add(1*time.Second).Format("15:04:05"), j.URL),
+			},
+		})
+	}
+	return responses
+}
+
+// RetryJob re-queues a failed job so the UI can recover from transient errors.
+func (a *App) RetryJob(id string) JobResponse {
+	escapedID := url.QueryEscape(strings.TrimSpace(id))
+	var job backendJob
+	if err := a.doBackendJSON(http.MethodPost, "/jobs/retry?id="+escapedID, bytes.NewReader(nil), &job); err != nil {
+		return JobResponse{
+			ID:      id,
+			Status:  "failed",
+			Message: err.Error(),
+		}
+	}
 	return mapBackendJobToFrontend(job)
 }
 
@@ -470,6 +559,8 @@ func labelForKind(kind string) string {
 		return "Video export"
 	case "transcribe":
 		return "Transcript"
+	case "music":
+		return "Music track"
 	case "cloud":
 		return "Cloud sync"
 	default:
@@ -485,7 +576,11 @@ func mapBackendJobToFrontend(job backendJob) JobResponse {
 	}
 
 	message := fmt.Sprintf("%s task is %s.", labelForKind(job.Type), job.Status)
-	if job.Error != "" {
+	if job.Uploaded {
+		message = fmt.Sprintf("Uploaded %s to Nextcloud.", fileName)
+	} else if job.UploadError != "" {
+		message = job.UploadError
+	} else if job.Error != "" {
 		message = job.Error
 	} else if fileName != "" {
 		message = fmt.Sprintf("Output file ready: %s", fileName)
@@ -503,6 +598,8 @@ func mapBackendJobToFrontend(job backendJob) JobResponse {
 		FileName:    fileName,
 		DownloadURL: buildDownloadURL(job.ID),
 		SourceURL:   job.URL,
+		Uploaded:    job.Uploaded,
+		UploadError: job.UploadError,
 	}
 }
 

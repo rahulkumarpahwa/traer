@@ -2,8 +2,10 @@ import { useStore } from "../store/useStore";
 import {
   CheckCircle2,
   Clock3,
+  CloudUpload,
   Download,
   FileOutput,
+  RotateCcw,
   Sparkles,
 } from "lucide-react";
 import Header from "./Header";
@@ -15,6 +17,7 @@ import { downloadJobFile } from "../lib/backend";
 function JobPanelContent() {
   const activeJobs = useStore((state) => state.activeJobs);
   const addNotification = useStore((state) => state.addNotification);
+  const retryJobAction = useStore((state) => state.retryJob);
 
   const handleDownload = async (job) => {
     try {
@@ -35,6 +38,10 @@ function JobPanelContent() {
         message: error?.message ?? "Unable to save the output file.",
       });
     }
+  };
+
+  const handleRetry = async (job) => {
+    await retryJobAction(job);
   };
 
   return (
@@ -83,6 +90,8 @@ function JobPanelContent() {
           {activeJobs.map((job) => {
             const displayName = job.fileName || job.title;
             const canDownload = job.status === "done" && Boolean(job.downloadUrl);
+            const isMusic = job.kind === "music";
+            const canRetry = job.status === "failed";
 
             return (
               <article
@@ -113,6 +122,22 @@ function JobPanelContent() {
                             Download
                           </button>
                         ) : null}
+                        {isMusic && job.uploaded ? (
+                          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-400/15 dark:bg-emerald-400/10 dark:text-emerald-200">
+                            <CloudUpload className="h-3.5 w-3.5" strokeWidth={1.8} />
+                            In Nextcloud
+                          </span>
+                        ) : null}
+                        {canRetry ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRetry(job)}
+                            className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 transition hover:border-amber-500/40 hover:text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
+                            Retry
+                          </button>
+                        ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-500 dark:text-emerald-100/55">
                         {job.message}
@@ -125,7 +150,15 @@ function JobPanelContent() {
                       ) : null}
                     </div>
                   </div>
-                  <StatusPill tone={job.status === "done" ? "strong" : "warm"}>
+                  <StatusPill
+                    tone={
+                      job.status === "done"
+                        ? "strong"
+                        : job.status === "failed"
+                          ? "warm"
+                          : "neutral"
+                    }
+                  >
                     {job.status}
                   </StatusPill>
                 </div>

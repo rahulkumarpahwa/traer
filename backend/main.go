@@ -12,6 +12,7 @@ import (
 
 	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/job"
+	"github.com/rahulkumarpahwa/traer/nextcloud"
 	"github.com/rahulkumarpahwa/traer/storage"
 	"github.com/rahulkumarpahwa/traer/storage/open"
 
@@ -43,12 +44,23 @@ func main() {
 	// Setting up the Storage
 	userStorage := storage.UserStorage{DB: DB}
 
+	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline).
+	// Credentials come exclusively from config/env and are never logged.
+	var uploader *nextcloud.Client
+	if cfg.NextcloudConfigured() {
+		uploader = nextcloud.NewClient(cfg.Nextcloud.URL, cfg.Nextcloud.Username, cfg.Nextcloud.AppPassword)
+		log.Printf("[nextcloud] uploader configured for user %q (base path %q)", cfg.Nextcloud.Username, cfg.Nextcloud.BasePath)
+	} else {
+		log.Println("[nextcloud] uploader NOT configured; music jobs will be rejected until NEXTCLOUD_* env vars are set")
+	}
+
 	router := http.NewServeMux()
 
 	// Creating the job worker with resolved executable paths
 	jobworker := job.JobWorker{
 		Config:          cfg,
 		ExecutablePaths: executablePaths,
+		Uploader:        uploader,
 	}
 
 	// starting the worker
@@ -71,6 +83,7 @@ func main() {
 	router.Handle("POST /jobs/create", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleCreateJobs)))
 	router.Handle("GET /jobs/active", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleActiveJobs)))
 	router.Handle("GET /jobs/status", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobStatus)))
+	router.Handle("POST /jobs/retry", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleRetryJob)))
 	router.Handle("GET /jobs/download", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleDownload)))
 	router.Handle("GET /instances/get", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleGetInstances)))
 

@@ -7,10 +7,11 @@ import (
 type JobStatus string
 
 const (
-	StatusQueued  JobStatus = "queued"
-	StatusRunning JobStatus = "running"
-	StatusDone    JobStatus = "done"
-	StatusFailed  JobStatus = "failed"
+	StatusQueued    JobStatus = "queued"
+	StatusRunning   JobStatus = "running"
+	StatusUploading JobStatus = "uploading"
+	StatusDone      JobStatus = "done"
+	StatusFailed    JobStatus = "failed"
 )
 
 type ContentType string
@@ -18,6 +19,7 @@ type ContentType string
 const (
 	VideoContent ContentType = "video"
 	AudioContent ContentType = "audio"
+	MusicContent ContentType = "music"
 )
 
 type Job struct {
@@ -28,5 +30,10 @@ type Job struct {
 	Progress float64
 	Output   string
 	Error    string
-	MU       sync.Mutex
+	// Uploaded is true once the finished file has been successfully stored in
+	// Nextcloud. UploadError captures any WebDAV failure so the UI can offer a
+	// retry without losing the already-downloaded file.
+	Uploaded    bool
+	UploadError string
+	MU          sync.Mutex
 }

@@ -2,6 +2,7 @@ package job
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,8 +12,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rahulkumarpahwa/traer/config"
+	"github.com/rahulkumarpahwa/traer/nextcloud"
 	jTypes "github.com/rahulkumarpahwa/traer/types/job"
 	"github.com/rahulkumarpahwa/traer/utils"
 )
@@ -21,7 +24,11 @@ type JobWorker struct {
 	startOnce       sync.Once
 	Config          *config.Config
 	ExecutablePaths map[string]string
-	JobsMu          sync.RWMutex
+	// Uploader streams finished music files to Nextcloud over WebDAV. It is nil
+	// when Nextcloud credentials are not configured, in which case music jobs
+	// fail fast with a clear error.
+	Uploader *nextcloud.Client
+	JobsMu   sync.RWMutex
 }
 
 var jobQueue = make(chan *jTypes.Job, 100)
@@ -30,6 +37,25 @@ var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 var Jobs = make(map[string]*jTypes.Job) // to store the jobs and fetch later with the id.
 
 func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.Job {
+	// Prevent accidental duplicate downloads: if an identical URL + type is
+	// already queued, running, uploading, or done, reuse that job instead of
+	// starting a new one. Failed jobs are excluded so a retry can be issued.
+	jw.JobsMu.RLock()
+	for _, existing := range Jobs {
+		existing.MU.Lock()
+		dup := existing.URL == url && existing.Type == contentType &&
+			(existing.Status == jTypes.StatusQueued ||
+				existing.Status == jTypes.StatusRunning ||
+				existing.Status == jTypes.StatusUploading ||
+				existing.Status == jTypes.StatusDone)
+		existing.MU.Unlock()
+		if dup {
+			jw.JobsMu.RUnlock()
+			return existing
+		}
+	}
+	jw.JobsMu.RUnlock()
+
 	job := &jTypes.Job{
 		ID:     utils.GenerateID(),
 		URL:    url,
@@ -45,11 +71,54 @@ func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.
 	case jobQueue <- job:
 		// ok
 	default:
+		job.MU.Lock()
 		job.Status = jTypes.StatusFailed
 		job.Error = "queue full"
+		job.MU.Unlock()
 	}
 
 	return job
+}
+
+// RetryJob re-queues an existing failed job. If the media file is already on
+// disk (download succeeded but the upload failed), the job resumes at the
+// upload step instead of re-downloading.
+func (jw *JobWorker) RetryJob(id string) (*jTypes.Job, error) {
+	jw.JobsMu.RLock()
+	job := Jobs[id]
+	jw.JobsMu.RUnlock()
+
+	if job == nil {
+		return nil, fmt.Errorf("job not found")
+	}
+
+	job.MU.Lock()
+	// Only failed (or queued-but-stuck) jobs are eligible for retry.
+	if job.Status != jTypes.StatusFailed {
+		status := job.Status
+		job.MU.Unlock()
+		if status == jTypes.StatusDone || status == jTypes.StatusUploading {
+			return nil, fmt.Errorf("job is already %s", status)
+		}
+		return nil, fmt.Errorf("job is %s and cannot be retried", status)
+	}
+	job.Error = ""
+	job.UploadError = ""
+	job.Status = jTypes.StatusQueued
+	job.MU.Unlock()
+
+	select {
+	case jobQueue <- job:
+		// ok
+	default:
+		job.MU.Lock()
+		job.Status = jTypes.StatusFailed
+		job.Error = "queue full"
+		job.MU.Unlock()
+		return nil, fmt.Errorf("queue full")
+	}
+
+	return job, nil
 }
 
 func (jw *JobWorker) GetJob(id string) *jTypes.Job {
@@ -82,38 +151,68 @@ func (jw *JobWorker) processJob(job *jTypes.Job) {
 	job.Status = jTypes.StatusRunning
 	job.MU.Unlock()
 
-	cmd := jw.buildCommand(job)
-	if cmd == nil {
+	// Resume support: for music jobs that already have a downloaded file on
+	// disk (e.g. a previous attempt failed during upload), skip the download
+	// and go straight to uploading so we never re-download unnecessarily.
+	resumeFromDisk := false
+	if job.Type == jTypes.MusicContent {
+		job.MU.Lock()
+		existingOutput := job.Output
+		job.MU.Unlock()
+		if existingOutput != "" {
+			if resolved, err := ResolveOutputPath(existingOutput); err == nil && resolved != "" {
+				job.MU.Lock()
+				job.Output = resolved
+				job.MU.Unlock()
+				resumeFromDisk = true
+			}
+		}
+	}
+
+	if !resumeFromDisk {
+		if err := jw.runDownload(job); err != nil {
+			job.MU.Lock()
+			job.Status = jTypes.StatusFailed
+			job.Error = err.Error()
+			job.MU.Unlock()
+			return
+		}
+	}
+
+	if err := jw.finalizeJob(job); err != nil {
 		job.MU.Lock()
 		job.Status = jTypes.StatusFailed
-		job.Error = "invalid job type"
+		job.Error = err.Error()
 		job.MU.Unlock()
 		return
+	}
+
+	job.MU.Lock()
+	job.Progress = 100
+	job.Status = jTypes.StatusDone
+	fmt.Printf("[job] Job %s done. Output: %s\n", job.ID, job.Output)
+	job.MU.Unlock()
+}
+
+// runDownload executes yt-dlp for the job and records the resolved output path.
+// It returns an error if the download fails; the caller records job state.
+func (jw *JobWorker) runDownload(job *jTypes.Job) error {
+	cmd := jw.buildCommand(job)
+	if cmd == nil {
+		return fmt.Errorf("invalid job type")
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
-		job.Error = err.Error()
-		job.MU.Unlock()
-		return
+		return err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
-		job.Error = err.Error()
-		job.MU.Unlock()
-		return
+		return err
 	}
 
 	if err := cmd.Start(); err != nil {
-		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
-		job.Error = err.Error()
-		job.MU.Unlock()
-		return
+		return err
 	}
 
 	var outputWg sync.WaitGroup
@@ -127,28 +226,69 @@ func (jw *JobWorker) processJob(job *jTypes.Job) {
 		parseOutput(stderr, job)
 	}()
 
-	err = cmd.Wait()
-	if err != nil {
-		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
-		job.Error = err.Error()
-		job.MU.Unlock()
-		return
-	}
-
+	waitErr := cmd.Wait()
 	outputWg.Wait()
+	if waitErr != nil {
+		return waitErr
+	}
 
 	if resolvedPath, err := ResolveOutputPath(job.Output); err == nil && resolvedPath != "" {
 		job.MU.Lock()
 		job.Output = resolvedPath
 		job.MU.Unlock()
 	}
+	return nil
+}
+
+// finalizeJob performs post-download work. For music jobs it uploads the MP3 to
+// Nextcloud and only deletes the temporary file after a successful upload. For
+// audio/video jobs it is a no-op (existing behavior is preserved).
+func (jw *JobWorker) finalizeJob(job *jTypes.Job) error {
+	if job.Type != jTypes.MusicContent {
+		return nil
+	}
+
+	if jw.Uploader == nil || !jw.Uploader.Configured() {
+		return fmt.Errorf("nextcloud is not configured")
+	}
 
 	job.MU.Lock()
-	job.Progress = 100
-	job.Status = jTypes.StatusDone
-	fmt.Printf("[job] Job %s done. Output: %s\n", job.ID, job.Output)
+	output := job.Output
+	job.Status = jTypes.StatusUploading
 	job.MU.Unlock()
+
+	if output == "" {
+		return fmt.Errorf("no output file to upload")
+	}
+	if _, err := os.Stat(output); err != nil {
+		return fmt.Errorf("output file missing: %w", err)
+	}
+
+	fileName := filepath.Base(output)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	if err := jw.Uploader.UploadFile(ctx, output, jw.Config.Nextcloud.BasePath, fileName); err != nil {
+		job.MU.Lock()
+		job.UploadError = err.Error()
+		job.MU.Unlock()
+		return fmt.Errorf("upload failed: %w", err)
+	}
+
+	// Mark uploaded and delete the temporary file ONLY after a successful
+	// upload. If deletion fails we still consider the job successful because the
+	// file safely lives in Nextcloud.
+	job.MU.Lock()
+	job.Uploaded = true
+	job.UploadError = ""
+	job.MU.Unlock()
+
+	if err := os.Remove(output); err != nil {
+		fmt.Printf("[job] uploaded %s but failed to delete temp file %s: %v\n", fileName, output, err)
+	} else {
+		fmt.Printf("[job] uploaded %s to Nextcloud and removed temp file\n", fileName)
+	}
+	return nil
 }
 
 func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
@@ -171,7 +311,7 @@ func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
 
 	ffmpegLocation := filepath.Dir(ffmpegPath)
 
-	if job.Type == jTypes.AudioContent {
+	if job.Type == jTypes.AudioContent || job.Type == jTypes.MusicContent {
 		args := append([]string{
 			"-f", "bestaudio",
 			"-x",

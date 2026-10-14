@@ -1,1 +1,19 @@
 /build
+
+# Secrets & local configuration (never commit real credentials)
+.env
+*.env
+!.env.example
+backend/local/local.yaml
+
+# Runtime data
+backend/downloads/
+backend/database/
+backend/traer-backend
+traer-backend
+
+# OS / editor noise
+*.exe
+*.log
+.DS_Store
+/traer
