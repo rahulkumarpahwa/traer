@@ -74,7 +74,6 @@ func newModel(client *Client) model {
 	identifier.Focus()
 	identifier.CharLimit = 128
 	identifier.Width = 40
-
 	username := textinput.New()
 	username.Placeholder = "username"
 	username.CharLimit = 64
@@ -118,23 +117,42 @@ func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-// loginFields returns the ordered list of active login inputs for the current
-// mode, so focus cycling stays simple.
-func (m model) loginFields() []*textinput.Model {
+// loginFieldCount returns the number of active login inputs for the current
+// mode. It deliberately returns a count (not pointers into a copy) so callers
+// never mutate a throwaway value.
+func (m model) loginFieldCount() int {
 	if m.signupMode {
-		return []*textinput.Model{&m.username, &m.email, &m.password}
+		return 3 // username, email, password
 	}
-	return []*textinput.Model{&m.identifier, &m.password}
+	return 2 // identifier, password
 }
 
+// focusLoginField focuses the real fields on the model. It must use the pointer
+// receiver and address m's own fields directly; going through a value-receiver
+// helper would return pointers into a discarded copy and focus nothing.
 func (m *model) focusLoginField() {
-	fields := m.loginFields()
-	for i, f := range fields {
-		if i == m.loginFocus {
-			f.Focus()
-		} else {
-			f.Blur()
+	m.identifier.Blur()
+	m.username.Blur()
+	m.email.Blur()
+	m.password.Blur()
+
+	if m.signupMode {
+		switch m.loginFocus {
+		case 0:
+			m.username.Focus()
+		case 1:
+			m.email.Focus()
+		default:
+			m.password.Focus()
 		}
+		return
+	}
+
+	switch m.loginFocus {
+	case 0:
+		m.identifier.Focus()
+	default:
+		m.password.Focus()
 	}
 }
 
@@ -224,8 +242,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c", "q":
+	// ctrl+c always quits. The bare 'q' key is intentionally NOT a global quit
+	// here because it is a valid character in usernames/passwords/URLs; quitting
+	// on 'q' is handled contextually in the job-list view instead.
+	if msg.String() == "ctrl+c" {
 		return m, tea.Quit
 	}
 
@@ -238,12 +258,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) handleLoginKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab", "down", "up":
-		fields := m.loginFields()
 		dir := 1
 		if msg.String() == "up" {
 			dir = -1
 		}
-		m.loginFocus = (m.loginFocus + dir + len(fields)) % len(fields)
+		count := m.loginFieldCount()
+		m.loginFocus = (m.loginFocus + dir + count) % count
 		m.focusLoginField()
 		return m, textinput.Blink
 	case "ctrl+t":
@@ -324,6 +344,9 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
+	case "q":
+		// Only quit from the job list view (not while editing URLs).
+		return m, tea.Quit
 	case "up", "k":
 		if m.jobIndex > 0 {
 			m.jobIndex--
