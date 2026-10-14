@@ -11,19 +11,16 @@ import (
 	"time"
 
 	"github.com/rahulkumarpahwa/traer/config"
-	"github.com/rahulkumarpahwa/traer/job"
-	"github.com/rahulkumarpahwa/traer/nextcloud"
-	"github.com/rahulkumarpahwa/traer/storage"
-	"github.com/rahulkumarpahwa/traer/storage/open"
-
-	jRoutes "github.com/rahulkumarpahwa/traer/routes/job"
-	uRoutes "github.com/rahulkumarpahwa/traer/routes/user"
+	"github.com/rahulkumarpahwa/traer/internal/handlers"
+	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
+	"github.com/rahulkumarpahwa/traer/internal/process"
+	"github.com/rahulkumarpahwa/traer/internal/storage"
 )
 
 func main() {
 
 	// setting up the configurations
-	cfg, err := config.Load("local/local.yaml")
+	cfg, err := config.Load("../../config.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,7 +32,7 @@ func main() {
 	}
 
 	// Opening the database:
-	openDB := open.OpenDB{Config: cfg}
+	openDB := storage.OpenDB{Config: cfg}
 	DB, err := openDB.Open()
 	if err != nil {
 		log.Fatal(err)
@@ -43,6 +40,12 @@ func main() {
 
 	// Setting up the Storage
 	userStorage := storage.UserStorage{DB: DB}
+
+	// setting up the admin user
+	err = userStorage.CreateAdminUser(context.Background(), cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline).
 	// Credentials come exclusively from config/env and are never logged.
@@ -57,7 +60,7 @@ func main() {
 	router := http.NewServeMux()
 
 	// Creating the job worker with resolved executable paths
-	jobworker := job.JobWorker{
+	jobworker := process.JobWorker{
 		Config:          cfg,
 		ExecutablePaths: executablePaths,
 		Uploader:        uploader,
@@ -67,9 +70,9 @@ func main() {
 	jobworker.StartWorkers()
 
 	// Creating the new Service Hanlder
-	serviceHandler := jRoutes.ServiceHandler{JW: &jobworker}
+	serviceHandler := handlers.ServiceHandler{JW: &jobworker}
 	// Creating the new user Handler
-	userHandler := uRoutes.UserHandler{UserStorage: &userStorage, Config: cfg}
+	userHandler := handlers.UserHandler{UserStorage: &userStorage, Config: cfg}
 
 	// Health check - no auth needed
 	router.HandleFunc("GET /", healthHandler)

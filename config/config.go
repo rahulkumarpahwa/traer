@@ -10,8 +10,13 @@ type Config struct {
 		Env  string `yaml:"env" env:"APP_ENV" env-default:"development"`
 	} `yaml:"app"`
 
+	Admin struct {
+		Email string `yaml:"email"`
+		Password string `yaml:"password"`
+	} `yaml:"admin"`
+
 	HTTPServer struct {
-		Address      string `yaml:"address" env:"HTTP_ADDRESS" env-default:"localhost:8080"`
+		Address      string `yaml:"address" env:"HTTP_ADDRESS" env-default:":8080"`
 		ReadTimeout  int    `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20"`
 		WriteTimeout int    `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20"`
 		IdleTimeout  int    `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"20"`
@@ -34,10 +39,6 @@ type Config struct {
 		AutoCleanup  bool   `yaml:"auto_cleanup" env:"AUTO_CLEANUP" env-default:"true"`
 	} `yaml:"storage"`
 
-	// Nextcloud holds the credentials and destination used by the music
-	// pipeline to upload finished MP3 files over WebDAV. These values are read
-	// from environment variables (or a git-ignored local config) and are never
-	// exposed to the frontend or written to logs.
 	Nextcloud struct {
 		URL         string `yaml:"url" env:"NEXTCLOUD_URL"`
 		Username    string `yaml:"username" env:"NEXTCLOUD_USERNAME"`

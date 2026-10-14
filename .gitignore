@@ -4,13 +4,11 @@
 .env
 *.env
 !.env.example
-backend/local/local.yaml
+*.yaml
 
-# Runtime data
-backend/downloads/
-backend/database/
-backend/traer-backend
-traer-backend
+# temp files
+/downloads/
+/database/
 
 # OS / editor noise
 *.exe

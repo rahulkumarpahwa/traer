@@ -1,4 +1,4 @@
-package routes
+package handlers
 
 import (
 	"encoding/json"
@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/rahulkumarpahwa/traer/job"
-	"github.com/rahulkumarpahwa/traer/storage"
-	jTypes "github.com/rahulkumarpahwa/traer/types/job"
-	"github.com/rahulkumarpahwa/traer/utils"
-	"github.com/rahulkumarpahwa/traer/validators"
+	"github.com/rahulkumarpahwa/traer/internal/process"
+	"github.com/rahulkumarpahwa/traer/internal/storage"
+	"github.com/rahulkumarpahwa/traer/internal/types"
+	"github.com/rahulkumarpahwa/traer/internal/utils"
+	"github.com/rahulkumarpahwa/traer/internal/validators"
 )
 
 type ServiceHandler struct {
-	JW          *job.JobWorker
+	JW          *process.JobWorker
 	UserStorage storage.UserStorageInterface
 }
 
@@ -52,14 +52,14 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var contentType jTypes.ContentType
+	var contentType types.ContentType
 	switch strings.ToLower(req.Type) {
 	case "audio":
-		contentType = jTypes.AudioContent
+		contentType = types.AudioContent
 	case "video":
-		contentType = jTypes.VideoContent
+		contentType = types.VideoContent
 	case "music":
-		contentType = jTypes.MusicContent
+		contentType = types.MusicContent
 		if hs.JW.Uploader == nil || !hs.JW.Uploader.Configured() {
 			utils.ErrorResponse(w, http.StatusServiceUnavailable, fmt.Errorf("nextcloud upload is not configured"))
 			return
@@ -76,7 +76,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	created := make([]*jTypes.Job, 0, len(urls))
+	created := make([]*types.Job, 0, len(urls))
 	for _, u := range urls {
 		created = append(created, hs.JW.AddJob(u, contentType))
 	}
@@ -96,12 +96,12 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 }
 
 func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Request) {
-	var activeJobs []*jTypes.Job
+	var activeJobs []*types.Job
 
 	hs.JW.JobsMu.RLock()
-	for _, j := range job.Jobs {
+	for _, j := range process.Jobs {
 		j.MU.Lock()
-		if j.Status == jTypes.StatusQueued || j.Status == jTypes.StatusRunning || j.Status == jTypes.StatusUploading {
+		if j.Status == types.StatusQueued || j.Status == types.StatusRunning || j.Status == types.StatusUploading {
 			activeJobs = append(activeJobs, j)
 		}
 		j.MU.Unlock()
@@ -181,8 +181,8 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 	if j == nil {
 		fmt.Printf("[download] Job not found with id: %s\n", id)
 		hs.JW.JobsMu.RLock()
-		fmt.Printf("[download] Available jobs: %v\n", len(job.Jobs))
-		for jid := range job.Jobs {
+		fmt.Printf("[download] Available jobs: %v\n", len(process.Jobs))
+		for jid := range process.Jobs {
 			fmt.Printf("[download]   - %s\n", jid)
 		}
 		hs.JW.JobsMu.RUnlock()
@@ -197,7 +197,7 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 
 	fmt.Printf("[download] Job found: status=%s, output=%s\n", status, outputPath)
 
-	if status != jTypes.StatusDone {
+	if status != types.StatusDone {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
 		return
 	}
@@ -207,7 +207,7 @@ func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	resolvedPath, err := job.ResolveOutputPath(outputPath)
+	resolvedPath, err := process.ResolveOutputPath(outputPath)
 	if err == nil && resolvedPath != "" {
 		outputPath = resolvedPath
 		j.MU.Lock()

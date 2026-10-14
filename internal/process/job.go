@@ -1,4 +1,4 @@
-package job
+package process
 
 import (
 	"bufio"
@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/rahulkumarpahwa/traer/config"
-	"github.com/rahulkumarpahwa/traer/nextcloud"
-	jTypes "github.com/rahulkumarpahwa/traer/types/job"
-	"github.com/rahulkumarpahwa/traer/utils"
+	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
+	"github.com/rahulkumarpahwa/traer/internal/types"
+	"github.com/rahulkumarpahwa/traer/internal/utils"
 )
 
 type JobWorker struct {
@@ -31,12 +31,12 @@ type JobWorker struct {
 	JobsMu   sync.RWMutex
 }
 
-var jobQueue = make(chan *jTypes.Job, 100)
+var jobQueue = make(chan *types.Job, 100)
 var progressRegex = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
 
-var Jobs = make(map[string]*jTypes.Job) // to store the jobs and fetch later with the id.
+var Jobs = make(map[string]*types.Job) // to store the jobs and fetch later with the id.
 
-func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.Job {
+func (jw *JobWorker) AddJob(url string, contentType types.ContentType) *types.Job {
 	// Prevent accidental duplicate downloads: if an identical URL + type is
 	// already queued, running, uploading, or done, reuse that job instead of
 	// starting a new one. Failed jobs are excluded so a retry can be issued.
@@ -44,10 +44,10 @@ func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.
 	for _, existing := range Jobs {
 		existing.MU.Lock()
 		dup := existing.URL == url && existing.Type == contentType &&
-			(existing.Status == jTypes.StatusQueued ||
-				existing.Status == jTypes.StatusRunning ||
-				existing.Status == jTypes.StatusUploading ||
-				existing.Status == jTypes.StatusDone)
+			(existing.Status == types.StatusQueued ||
+				existing.Status == types.StatusRunning ||
+				existing.Status == types.StatusUploading ||
+				existing.Status == types.StatusDone)
 		existing.MU.Unlock()
 		if dup {
 			jw.JobsMu.RUnlock()
@@ -56,10 +56,10 @@ func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.
 	}
 	jw.JobsMu.RUnlock()
 
-	job := &jTypes.Job{
+	job := &types.Job{
 		ID:     utils.GenerateID(),
 		URL:    url,
-		Status: jTypes.StatusQueued,
+		Status: types.StatusQueued,
 		Type:   contentType,
 	}
 	jw.JobsMu.Lock()
@@ -72,7 +72,7 @@ func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.
 		// ok
 	default:
 		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
+		job.Status = types.StatusFailed
 		job.Error = "queue full"
 		job.MU.Unlock()
 	}
@@ -83,7 +83,7 @@ func (jw *JobWorker) AddJob(url string, contentType jTypes.ContentType) *jTypes.
 // RetryJob re-queues an existing failed job. If the media file is already on
 // disk (download succeeded but the upload failed), the job resumes at the
 // upload step instead of re-downloading.
-func (jw *JobWorker) RetryJob(id string) (*jTypes.Job, error) {
+func (jw *JobWorker) RetryJob(id string) (*types.Job, error) {
 	jw.JobsMu.RLock()
 	job := Jobs[id]
 	jw.JobsMu.RUnlock()
@@ -94,17 +94,17 @@ func (jw *JobWorker) RetryJob(id string) (*jTypes.Job, error) {
 
 	job.MU.Lock()
 	// Only failed (or queued-but-stuck) jobs are eligible for retry.
-	if job.Status != jTypes.StatusFailed {
+	if job.Status != types.StatusFailed {
 		status := job.Status
 		job.MU.Unlock()
-		if status == jTypes.StatusDone || status == jTypes.StatusUploading {
+		if status == types.StatusDone || status == types.StatusUploading {
 			return nil, fmt.Errorf("job is already %s", status)
 		}
 		return nil, fmt.Errorf("job is %s and cannot be retried", status)
 	}
 	job.Error = ""
 	job.UploadError = ""
-	job.Status = jTypes.StatusQueued
+	job.Status = types.StatusQueued
 	job.MU.Unlock()
 
 	select {
@@ -112,7 +112,7 @@ func (jw *JobWorker) RetryJob(id string) (*jTypes.Job, error) {
 		// ok
 	default:
 		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
+		job.Status = types.StatusFailed
 		job.Error = "queue full"
 		job.MU.Unlock()
 		return nil, fmt.Errorf("queue full")
@@ -121,7 +121,7 @@ func (jw *JobWorker) RetryJob(id string) (*jTypes.Job, error) {
 	return job, nil
 }
 
-func (jw *JobWorker) GetJob(id string) *jTypes.Job {
+func (jw *JobWorker) GetJob(id string) *types.Job {
 	jw.JobsMu.RLock()
 	job := Jobs[id]
 	jw.JobsMu.RUnlock()
@@ -146,16 +146,16 @@ func (jw *JobWorker) worker() {
 	}
 }
 
-func (jw *JobWorker) processJob(job *jTypes.Job) {
+func (jw *JobWorker) processJob(job *types.Job) {
 	job.MU.Lock()
-	job.Status = jTypes.StatusRunning
+	job.Status = types.StatusRunning
 	job.MU.Unlock()
 
 	// Resume support: for music jobs that already have a downloaded file on
 	// disk (e.g. a previous attempt failed during upload), skip the download
 	// and go straight to uploading so we never re-download unnecessarily.
 	resumeFromDisk := false
-	if job.Type == jTypes.MusicContent {
+	if job.Type == types.MusicContent {
 		job.MU.Lock()
 		existingOutput := job.Output
 		job.MU.Unlock()
@@ -172,7 +172,7 @@ func (jw *JobWorker) processJob(job *jTypes.Job) {
 	if !resumeFromDisk {
 		if err := jw.runDownload(job); err != nil {
 			job.MU.Lock()
-			job.Status = jTypes.StatusFailed
+			job.Status = types.StatusFailed
 			job.Error = err.Error()
 			job.MU.Unlock()
 			return
@@ -181,7 +181,7 @@ func (jw *JobWorker) processJob(job *jTypes.Job) {
 
 	if err := jw.finalizeJob(job); err != nil {
 		job.MU.Lock()
-		job.Status = jTypes.StatusFailed
+		job.Status = types.StatusFailed
 		job.Error = err.Error()
 		job.MU.Unlock()
 		return
@@ -189,14 +189,14 @@ func (jw *JobWorker) processJob(job *jTypes.Job) {
 
 	job.MU.Lock()
 	job.Progress = 100
-	job.Status = jTypes.StatusDone
+	job.Status = types.StatusDone
 	fmt.Printf("[job] Job %s done. Output: %s\n", job.ID, job.Output)
 	job.MU.Unlock()
 }
 
 // runDownload executes yt-dlp for the job and records the resolved output path.
 // It returns an error if the download fails; the caller records job state.
-func (jw *JobWorker) runDownload(job *jTypes.Job) error {
+func (jw *JobWorker) runDownload(job *types.Job) error {
 	cmd := jw.buildCommand(job)
 	if cmd == nil {
 		return fmt.Errorf("invalid job type")
@@ -243,8 +243,8 @@ func (jw *JobWorker) runDownload(job *jTypes.Job) error {
 // finalizeJob performs post-download work. For music jobs it uploads the MP3 to
 // Nextcloud and only deletes the temporary file after a successful upload. For
 // audio/video jobs it is a no-op (existing behavior is preserved).
-func (jw *JobWorker) finalizeJob(job *jTypes.Job) error {
-	if job.Type != jTypes.MusicContent {
+func (jw *JobWorker) finalizeJob(job *types.Job) error {
+	if job.Type != types.MusicContent {
 		return nil
 	}
 
@@ -254,7 +254,7 @@ func (jw *JobWorker) finalizeJob(job *jTypes.Job) error {
 
 	job.MU.Lock()
 	output := job.Output
-	job.Status = jTypes.StatusUploading
+	job.Status = types.StatusUploading
 	job.MU.Unlock()
 
 	if output == "" {
@@ -291,7 +291,7 @@ func (jw *JobWorker) finalizeJob(job *jTypes.Job) error {
 	return nil
 }
 
-func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
+func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 	baseArgs := []string{
 		"--newline",
 		"--progress",
@@ -311,7 +311,7 @@ func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
 
 	ffmpegLocation := filepath.Dir(ffmpegPath)
 
-	if job.Type == jTypes.AudioContent || job.Type == jTypes.MusicContent {
+	if job.Type == types.AudioContent || job.Type == types.MusicContent {
 		args := append([]string{
 			"-f", "bestaudio",
 			"-x",
@@ -325,7 +325,7 @@ func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
 		return exec.Command(ytDlpPath, args...)
 	}
 
-	if job.Type == jTypes.VideoContent {
+	if job.Type == types.VideoContent {
 		args := append([]string{
 			"-f", "bv*+ba/best",
 			"--merge-output-format", "mp4",
@@ -342,7 +342,7 @@ func (jw *JobWorker) buildCommand(job *jTypes.Job) *exec.Cmd {
 	return nil
 }
 
-func parseOutput(pipe io.ReadCloser, job *jTypes.Job) {
+func parseOutput(pipe io.ReadCloser, job *types.Job) {
 	scanner := bufio.NewScanner(pipe)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)

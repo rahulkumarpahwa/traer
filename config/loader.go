@@ -8,7 +8,7 @@ import (
 )
 
 func Load(path string) (*Config, error) {
-	cfg := &Config{}
+	var cfg Config
 
 	// If YAML exists → load it
 	if path != "" {
@@ -19,10 +19,5 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	// Always override with ENV if present
-	if err := cleanenv.ReadEnv(cfg); err != nil {
-		return nil, fmt.Errorf("failed to read env config: %w", err)
-	}
-
-	return cfg, nil
+	return &cfg, nil
 }

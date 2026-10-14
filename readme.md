@@ -1,129 +1,278 @@
-# TRAER — YouTube → Nextcloud Music Pipeline (TUI)
+# Traer Backend
 
-Traer is a terminal application built in Go with a [Bubbletea](https://github.com/charmbracelet/bubbletea) TUI. It downloads the audio from one or more YouTube / YouTube Music links, converts it to MP3 (yt-dlp + FFmpeg), and uploads the result directly to your Nextcloud Music folder over the WebDAV API.
+## Overview
 
-> Only download content you own or are authorized to use. Traer does not grant any rights to media; it is a tool you operate against sources you are permitted to access.
-
----
-
-## Architecture
-
-Traer has two parts:
-
-1. **Backend** (`backend/`) — a Go HTTP service that owns the job queue, workers, yt-dlp/FFmpeg orchestration, SQLite auth (JWT), and the Nextcloud WebDAV uploader.
-2. **TUI** (root module) — a Bubbletea client (`main.go`, `client.go`, `model.go`, `view.go`, `styles.go`). It is only an HTTP client to the backend; all processing happens server-side.
-
-```
-TUI (this module)  --HTTP+JWT cookie-->  backend  --yt-dlp/FFmpeg--> MP3
-                                                              \-WebDAV-> Nextcloud
-```
-
-The TUI keeps the backend session in a cookie jar exactly like a browser would (the backend issues an HttpOnly `token` cookie on login).
+Traer Backend is a Go-based service that provides asynchronous media processing using yt-dlp. It allows users to submit YouTube URLs and convert them into audio (MP3) or video (MP4) files. The system is built with a worker queue architecture to handle concurrent jobs efficiently while tracking progress in real time.
 
 ---
 
 ## Features
 
-- Sign in / create an account (username-or-email + password).
-- Paste one or many YouTube / YouTube Music links (one per line).
-- Queue each as a music job: extract MP3 and upload to Nextcloud.
-- Live job list with status (`queued` / `running` / `uploading` / `done` / `failed`), a progress bar, and errors.
-- Retry failed jobs; the backend resumes from the already-downloaded file instead of re-downloading.
-- Duplicate protection: re-submitting a link that is already queued/running/done is a no-op.
-- Temporary MP3 files are deleted only after a successful Nextcloud upload.
+* Asynchronous job processing using worker pool
+* Support for audio (MP3) and video (MP4) conversion
+* Real-time progress tracking via polling
+* File download endpoint for completed jobs
+* Configurable worker concurrency
+* Graceful server shutdown
+* Thread-safe job state management
 
 ---
 
-## Requirements
+## Architecture
 
-- Go (>= 1.25)
-- On the backend host: `yt-dlp` and `ffmpeg` (auto-installed on Linux/macOS/Windows if missing), or run the backend via Docker where they are preinstalled.
+The system is composed of three main components:
 
----
+### 1. HTTP Layer
 
-## Running
+Handles incoming API requests and responses.
 
-### 1. Start the backend
+### 2. Job Service
 
-Locally:
-```bash
-cd backend
-# create local/local.yaml from the example and set JWT_SECRET + Nextcloud creds,
-# or export the equivalent env vars (see backend/local.example.yaml / .env.example)
-go run .
-# listens on http://localhost:8080
-```
+Responsible for:
 
-Or with Docker (from the repo root):
-```bash
-cp .env.example .env   # then fill in JWT_SECRET and Nextcloud creds
-docker compose up -d --build
-# backend is published on 127.0.0.1:8080 (loopback only - not public)
-```
+* Queue management
+* Worker pool execution
+* Progress tracking
+* Job lifecycle management
 
-### 2. Start the TUI
+### 3. External Tools
 
-```bash
-go run . --backend http://localhost:8080
-# or set TRAER_BACKEND_URL instead of the flag
-```
+* yt-dlp: media downloading
+* ffmpeg: media conversion
 
 ---
 
-## Usage / Keys
-
-**Sign-in screen**
-- `enter` — submit
-- `tab` / `up` / `down` — move between fields
-- `ctrl+t` — toggle between sign in and create account
-- `q` / `ctrl+c` — quit
-
-**Main screen**
-- Paste links into the box (one per line)
-- `ctrl+s` — queue all pasted links to Nextcloud
-- `tab` — switch focus between the link box and the job list
-- When the job list is focused: `up`/`down` or `j`/`k` to select, `r` to retry a failed job
-- `ctrl+r` — refresh now (also auto-refreshes every 2s)
-- `q` / `ctrl+c` — quit
-
----
-
-## Configuration
-
-All secrets live in environment variables or a git-ignored config file and are never shown in the TUI or logged:
-
-| Variable | Purpose |
-| --- | --- |
-| `JWT_SECRET` | Signs session cookies (backend) |
-| `NEXTCLOUD_URL` | Nextcloud base URL (e.g. `http://app:80` inside Docker) |
-| `NEXTCLOUD_USERNAME` | Nextcloud user |
-| `NEXTCLOUD_APP_PASSWORD` | Nextcloud app password (never your account password) |
-| `NEXTCLOUD_BASE_PATH` | Destination folder (default `Music/Downloads`) |
-| `TRAER_BACKEND_URL` | Backend URL the TUI connects to (default `http://localhost:8080`) |
-
-See `.env.example` and `backend/local.example.yaml`.
-
----
-
-## Project structure
+## Project Structure
 
 ```
 .
-├── main.go        # TUI entry point (flags + Bubbletea program)
-├── client.go      # backend HTTP client (login, queue, status, retry)
-├── model.go       # Bubbletea model + update logic
-├── view.go        # rendering
-├── styles.go      # lipgloss styles + progress bar
-├── backend/       # Go HTTP service (queue, workers, yt-dlp/FFmpeg, WebDAV)
-├── docker-compose.yml
-└── .env.example
+├── main.go          # Application entry point
+├── routes/          # HTTP handlers
+├── job/             # Worker, queue, and processing logic
+├── types/           # Shared structs and enums
+├── utils/           # Helper utilities (JSON response, errors, IDs)
+└── downloads/       # Output files directory
 ```
 
 ---
 
-## Security notes
+## Worker Model
 
-- Nextcloud credentials stay on the backend only; the TUI never sees them.
-- The backend API is published on loopback only in the provided compose file.
-- Filenames are sanitized and URL-escaped before the WebDAV upload.
-- Authentication is required before any pipeline action.
+* Fixed-size worker pool (default: 2 workers)
+* Jobs are pushed into a buffered channel queue
+* Each worker:
+
+  * Picks a job
+  * Executes yt-dlp command
+  * Parses progress in real time
+  * Updates job state
+  * Moves to next job after completion
+
+Concurrency is controlled by limiting the number of workers.
+
+---
+
+## Job Lifecycle
+
+1. Job Created → Status: queued
+2. Worker picks job → Status: running
+3. Progress updates (0–100%)
+4. Job completes → Status: done
+5. Output file available for download
+
+Failure scenarios:
+
+* Invalid input
+* yt-dlp execution failure
+* Queue overflow
+
+---
+
+## API Endpoints
+
+### Health Check
+
+```
+GET /
+```
+
+Response:
+
+```
+200 OK
+```
+
+---
+
+### Create Job
+
+```
+POST /jobs/create
+```
+
+Request:
+
+```json
+{
+  "url": "https://youtube.com/...",
+  "type": "audio" | "video"
+}
+```
+
+Response:
+
+```json
+{
+  "id": "job-id",
+  "status": "queued",
+  "progress": 0
+}
+```
+
+---
+
+### Get Active Jobs
+
+```
+GET /jobs/active
+```
+
+Returns all jobs with status:
+
+* queued
+* running
+
+---
+
+### Get Job Status
+
+```
+GET /jobs/status?id=<job_id>
+```
+
+Response:
+
+```json
+{
+  "id": "job-id",
+  "status": "running",
+  "progress": 42.3,
+  "output": "",
+  "error": ""
+}
+```
+
+---
+
+### Download File
+
+```
+GET /jobs/download?id=<job_id>
+```
+
+Returns:
+
+* File stream if job is completed
+* Error if job is not ready or failed
+
+---
+
+### Get Worker Instances
+
+```
+GET /instances/get
+```
+
+Response:
+
+```json
+{
+  "instances": 2
+}
+```
+
+---
+
+## Concurrency Model
+
+* Job queue implemented using Go channels
+* Worker pool implemented using goroutines
+* Shared job state protected via mutex locks
+* One job per worker at a time
+* Maximum parallel jobs = number of workers
+
+---
+
+## Progress Tracking
+
+* yt-dlp outputs progress to stdout/stderr
+* Output is parsed using regex
+* Progress is updated in shared job struct
+* Clients poll `/jobs/status` to retrieve latest state
+
+---
+
+## Error Handling
+
+* Centralized JSON error responses via utility package
+* Graceful failure states recorded per job
+* Queue overflow handled with fallback status
+
+---
+
+## Shutdown Handling
+
+* Graceful shutdown using context and OS signals
+* Ensures HTTP server stops accepting new requests
+* Allows in-flight operations to complete within timeout
+
+---
+
+## Dependencies
+
+* Go (1.20+ recommended)
+* yt-dlp
+* ffmpeg
+
+Ensure both yt-dlp and ffmpeg are installed and available in system PATH.
+
+---
+
+## Running the Server
+
+```
+go run main.go
+```
+
+Server runs on:
+
+```
+http://localhost:8080
+```
+
+---
+
+## Limitations
+
+* No persistent storage (in-memory job store)
+* No authentication or authorization
+* No job cancellation support
+* Worker scaling is static after startup
+* Polling-based progress tracking (no WebSocket support)
+
+---
+
+## Future Improvements
+
+* Persistent storage (SQLite / Redis)
+* WebSocket-based real-time updates
+* Job cancellation and retry mechanisms
+* Dynamic worker scaling
+* File cleanup and retention policies
+* Multi-user support with authentication
+
+---
+
+## Summary
+
+This backend implements a scalable and concurrent job processing system using Go. It demonstrates production-grade concepts such as worker pools, concurrency control, process orchestration, and API-driven job management while maintaining simplicity and extensibility.
