@@ -12,8 +12,8 @@ import (
 func (s *UserStorage) CreateAdminUser(ctx context.Context, cfg *config.Config) error {
 
 	id := uuid.New()
-	email := cfg.Admin.Email
-	password := cfg.Admin.Password
+	email := cfg.AdminEmail
+	password := cfg.AdminPassword
 	hashedPassword, err := auth.HashPassword(password)
 	if err != nil {
 		return err

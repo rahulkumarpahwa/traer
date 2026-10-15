@@ -14,11 +14,11 @@ type OpenDB struct {
 }
 
 func (o *OpenDB) Open() (*sql.DB, error) {
-	if o.Config.Database.Path == "" {
+	if o.Config.DatabasePath == "" {
 		return nil, fmt.Errorf("Database Path not found!")
 	}
 
-	DB, err := sql.Open("sqlite", o.Config.Database.Path)
+	DB, err := sql.Open("sqlite", o.Config.DatabasePath)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (o *OpenDB) Open() (*sql.DB, error) {
     CHECK (status IN ('not_started', 'started', 'under_process', 'completed', 'incomplete')),
     url TEXT,
     job_type TEXT DEFAULT NULL
-    CHECK (job_type IN ('audio', 'video', 'transcription', 'playlist') OR job_type IS NULL)
+    CHECK (job_type IN ('audio', 'video', 'transcription', 'playlist', 'upload') OR job_type IS NULL)
 	);`)
 
 	if err != nil {

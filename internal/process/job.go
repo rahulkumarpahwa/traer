@@ -134,7 +134,7 @@ func (jw *JobWorker) StartWorkers() {
 			panic(err)
 		}
 
-		for i := 0; i < jw.Config.Workers.Instances; i++ {
+		for i := 0; i < jw.Config.WorkerInstances; i++ {
 			go jw.worker()
 		}
 	})
@@ -268,7 +268,7 @@ func (jw *JobWorker) finalizeJob(job *types.Job) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	if err := jw.Uploader.UploadFile(ctx, output, jw.Config.Nextcloud.BasePath, fileName); err != nil {
+	if err := jw.Uploader.UploadFile(ctx, output, jw.Config.NextcloudBasePath, fileName); err != nil {
 		job.MU.Lock()
 		job.UploadError = err.Error()
 		job.MU.Unlock()

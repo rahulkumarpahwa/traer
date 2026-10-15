@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type DependencyManager struct {
@@ -18,10 +19,12 @@ func NewDependencyManager() *DependencyManager {
 	}
 }
 
-func (d *DependencyManager) Ensure(tools []string) error {
+func (d *DependencyManager) Ensure(tools string) error {
+	toolsList := strings.Split(tools, ",")
+
 	var missing []string
 
-	for _, tool := range tools {
+	for _, tool := range toolsList {
 		// 1) try PATH
 		path, err := exec.LookPath(tool)
 		if err == nil {

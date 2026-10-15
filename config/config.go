@@ -1,73 +1,120 @@
 package config
 
 import (
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/rahulkumarpahwa/traer/bootstrap"
 )
 
 type Config struct {
-	App struct {
-		Name string `yaml:"name" env:"APP_NAME" env-default:"traer-backend"`
-		Env  string `yaml:"env" env:"APP_ENV" env-default:"development"`
-	} `yaml:"app"`
+	AppName string
+	AppEnv  string
 
-	Admin struct {
-		Email string `yaml:"email"`
-		Password string `yaml:"password"`
-	} `yaml:"admin"`
+	AdminEmail    string
+	AdminPassword string
 
-	HTTPServer struct {
-		Address      string `yaml:"address" env:"HTTP_ADDRESS" env-default:":8080"`
-		ReadTimeout  int    `yaml:"read_timeout" env:"HTTP_READ_TIMEOUT" env-default:"20"`
-		WriteTimeout int    `yaml:"write_timeout" env:"HTTP_WRITE_TIMEOUT" env-default:"20"`
-		IdleTimeout  int    `yaml:"idle_timeout" env:"HTTP_IDLE_TIMEOUT" env-default:"20"`
-	} `yaml:"http_server"`
+	HTTPAddress      string
+	HTTPReadTimeout  time.Duration
+	HTTPWriteTimeout time.Duration
+	HTTPIdleTimeout  time.Duration
 
-	Workers struct {
-		Instances int `yaml:"instances" env:"WORKER_INSTANCES" env-default:"2"`
-		QueueSize int `yaml:"queue_size" env:"QUEUE_SIZE" env-default:"100"`
-	} `yaml:"workers"`
+	WorkerInstances int
+	WorkerQueueSize int
 
-	Jobs struct {
-		MaxDuration     string `yaml:"max_duration" env:"JOB_MAX_DURATION" env-default:"30m"`
-		CleanupInterval string `yaml:"cleanup_interval" env:"JOB_CLEANUP_INTERVAL" env-default:"10m"`
-		RetentionTime   string `yaml:"retention_time" env:"JOB_RETENTION_TIME" env-default:"1h"`
-	} `yaml:"jobs"`
+	JobMaxDuration     time.Duration
+	JobCleanupInterval time.Duration
+	JobRetentionTime   time.Duration
 
-	Storage struct {
-		DownloadPath string `yaml:"download_path" env:"DOWNLOAD_PATH" env-default:"downloads/"`
-		MaxFileSize  int    `yaml:"max_file_size_mb" env:"MAX_FILE_SIZE_MB" env-default:"1024"`
-		AutoCleanup  bool   `yaml:"auto_cleanup" env:"AUTO_CLEANUP" env-default:"true"`
-	} `yaml:"storage"`
+	StorageDownloadPath string
+	StorageMaxFileSize  int
+	StorageAutoCleanup  bool
 
-	Nextcloud struct {
-		URL         string `yaml:"url" env:"NEXTCLOUD_URL"`
-		Username    string `yaml:"username" env:"NEXTCLOUD_USERNAME"`
-		AppPassword string `yaml:"app_password" env:"NEXTCLOUD_APP_PASSWORD"`
-		BasePath    string `yaml:"base_path" env:"NEXTCLOUD_BASE_PATH" env-default:"Music/Downloads"`
-	} `yaml:"nextcloud"`
+	Executables string
 
-	Executables struct {
-		Required []string `yaml:"required"`
-	} `yaml:"executables"`
+	DatabasePath string
 
-	Database struct {
-		Path string `yaml:"path" env:"DB_PATH" env-default:"database/database.db"`
-	} `yaml:"database"`
+	LoggingLevel  string
+	LoggingFormat string
 
-	Logging struct {
-		Level  string `yaml:"level" env:"LOG_LEVEL" env-default:"info"`
-		Format string `yaml:"format" env:"LOG_FORMAT" env-default:"text"`
-	} `yaml:"logging"`
+	JWTSecret string
 
-	Jwt struct {
-		Secret string `yaml:"secret" env:"JWT_SECRET"`
-	} `yaml:"jwt"`
+	NextcloudURL         string
+	NextcloudUsername    string
+	NextcloudAppPassword string
+	NextcloudBasePath    string
+}
+
+func getInt(key string, fallback int) int {
+	v, err := strconv.Atoi(os.Getenv(key))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func getBool(key string, fallback bool) bool {
+	v, err := strconv.ParseBool(os.Getenv(key))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func getDuration(key string, fallback time.Duration) time.Duration {
+	v, err := time.ParseDuration(os.Getenv(key))
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func Load() *Config {
+
+	return &Config{
+		AppName: os.Getenv("APP_NAME"),
+		AppEnv:  os.Getenv("APP_ENV"),
+
+		AdminEmail:    os.Getenv("ADMINUSERNAME"),
+		AdminPassword: os.Getenv("ADMINPASSWORD"),
+
+		HTTPAddress:      os.Getenv("HTTP_SERVER_ADDRESS"),
+		HTTPReadTimeout:  time.Duration(getInt("HTTP_SERVER_READ_TIMEOUT", 60)) * time.Second,
+		HTTPWriteTimeout: time.Duration(getInt("HTTP_SERVER_WRITE_TIMEOUT", 3600)) * time.Second,
+		HTTPIdleTimeout:  time.Duration(getInt("HTTP_SERVER_IDLE_TIMEOUT", 120)) * time.Second,
+
+		WorkerInstances: getInt("WORKERS_INSTANCES", 2),
+		WorkerQueueSize: getInt("WORKERS_QUEUE_SIZE", 100),
+
+		JobMaxDuration:     getDuration("JOBS_MAX_DURATION", 30*time.Minute),
+		JobCleanupInterval: getDuration("JOBS_CLEANUP_INTERVAL", 10*time.Minute),
+		JobRetentionTime:   getDuration("JOBS_RETENTION_TIME", time.Hour),
+
+		StorageDownloadPath: os.Getenv("STORAGE_DOWNLOAD_PATH"),
+		StorageMaxFileSize:  getInt("STORAGE_MAX_FILE_SIZE_MB", 1024),
+		StorageAutoCleanup:  getBool("STORAGE_AUTO_CLEANUP", true),
+
+		Executables: os.Getenv("EXECUTABLES_REQUIRED"),
+
+		DatabasePath: os.Getenv("DATABASE_PATH"),
+
+		LoggingLevel:  os.Getenv("LOGGING_LEVEL"),
+		LoggingFormat: os.Getenv("LOGGING_FORMAT"),
+
+		JWTSecret: os.Getenv("JWT_SECRET"),
+
+		NextcloudURL:         os.Getenv("NEXTCLOUD_URL"),
+		NextcloudUsername:    os.Getenv("NEXTCLOUD_USERNAME"),
+		NextcloudAppPassword: os.Getenv("NEXTCLOUD_APP_PASSWORD"),
+		NextcloudBasePath:    os.Getenv("NEXTCLOUD_BASE_PATH"),
+	}
 }
 
 // Configured reports whether the Nextcloud integration has the minimum required
 // settings to attempt an upload.
 func (c *Config) NextcloudConfigured() bool {
-	return c.Nextcloud.URL != "" && c.Nextcloud.Username != "" && c.Nextcloud.AppPassword != ""
+	return c.NextcloudURL != "" && c.NextcloudUsername != "" && c.NextcloudAppPassword != ""
 }
 
 // ResolveExecutables resolves all required executables and returns a map of tool names to paths.
@@ -75,7 +122,7 @@ func (c *Config) NextcloudConfigured() bool {
 func (c *Config) ResolveExecutables() (map[string]string, error) {
 	depManager := bootstrap.NewDependencyManager()
 
-	if err := depManager.Ensure(c.Executables.Required); err != nil {
+	if err := depManager.Ensure(c.Executables); err != nil {
 		return nil, err
 	}
 

@@ -27,7 +27,7 @@ func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
 		return nil, fmt.Errorf("User or Config missing to generate token!")
 	}
 
-	if config.Jwt.Secret == "" {
+	if config.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT Secret is empty!")
 	}
 
@@ -47,7 +47,7 @@ func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(auth.Config.Jwt.Secret))
+	tokenString, err := token.SignedString([]byte(auth.Config.JWTSecret))
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign token: %w", err)
 	}
@@ -63,7 +63,7 @@ func (a *Auth) ParseAndValidateToken(cookie *http.Cookie) (*Claims, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method")
 		}
-		return []byte(a.Config.Jwt.Secret), nil
+		return []byte(a.Config.JWTSecret), nil
 	})
 	if err != nil || !token.Valid {
 		return nil, err
