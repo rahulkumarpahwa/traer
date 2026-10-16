@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rahulkumarpahwa/traer/config"
+	"github.com/rahulkumarpahwa/traer/database"
 	"github.com/rahulkumarpahwa/traer/internal/handlers"
 	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
 	"github.com/rahulkumarpahwa/traer/internal/process"
@@ -19,6 +20,13 @@ import (
 )
 
 func main() {
+
+	// database start
+	err := database.InitiateDatabase()
+	if err != nil {
+		// fmt.Println(err)
+		log.Fatal(err)
+	}
 
 	// setting up the configurations
 	cfg := config.Load()
@@ -102,7 +110,7 @@ func main() {
 		IdleTimeout:  time.Duration(cfg.HTTPIdleTimeout) * time.Second,
 	}
 
-	slog.Info("server started at port: ", cfg.HTTPAddress)
+	slog.Info("server started at", "port", cfg.HTTPAddress)
 
 	notifyChan := make(chan os.Signal, 1)
 
