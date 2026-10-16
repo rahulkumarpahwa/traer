@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "traer-backend-collection-clean",
     "name": "Traer Backend API",
-    "description": "Clean Postman collection for the Traer backend. Includes all six endpoints identified in the supplied collections: health, create job, active jobs, job status, download, and worker instances.\n\nSet the collection variable baseUrl to your server address if it is not http://localhost:8080. Run Create Job first; its test script saves the returned id to the jobId collection variable for the status and download requests.",
+    "description": "Clean Postman collection for the Traer backend. Includes all endpoints identified in the source code.\n\nAuth: The backend uses an HttpOnly `token` cookie issued by POST /login. Every authenticated request must send that cookie (Postman's cookie jar auto-persists it). Set the collection variable `baseUrl` to your server address.\n\nOrder: Register User -> Login -> [authenticated] -> Create Job -> Get Job Status / Download / Retry / List Active / Get Worker Instances / User operations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -20,21 +20,21 @@
     },
     {
       "key": "userId",
-      "value": "",
+      "value": "1",
       "type": "string",
-      "description": "User ID used by user lookup/update/delete requests."
+      "description": "User ID used by user update/delete/lookup requests (must be numeric; backend parses with strconv.Atoi)."
     },
     {
       "key": "userEmail",
       "value": "test@example.com",
       "type": "string",
-      "description": "Email used by user lookup requests."
+      "description": "Email used by lookup and registration requests."
     },
     {
       "key": "username",
       "value": "testuser",
       "type": "string",
-      "description": "Username used by login and lookup requests."
+      "description": "Username used by registration requests."
     }
   ],
   "item": [
@@ -105,10 +105,10 @@
                 "users"
               ]
             },
-            "description": "Public registration endpoint. Example JSON is a best-effort template; confirm required fields in HandleCreateUser.",
+            "description": "Public registration. Body: email and password are required; username is optional.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"testuser\",\n  \"email\": \"test@example.com\",\n  \"password\": \"ChangeMe123!\"\n}",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"ChangeMe123!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -141,10 +141,10 @@
                 "login"
               ]
             },
-            "description": "Public login endpoint. Example JSON is a best-effort template; confirm required fields in HandleLogin. If the server uses a session cookie, Postman normally retains it in its cookie jar.",
+            "description": "Public login. Returns HTTP 200 and sets an HttpOnly `token` cookie in the response. Backend checks `req.Password` and `req.Email` (reads email, not username).",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"ChangeMe123!\"\n}",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"ChangeMe123!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -297,6 +297,13 @@
               ],
               "path": [
                 "users"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{userId}}",
+                  "description": "User ID to update."
+                }
               ]
             },
             "description": "Authenticated user update endpoint. Example body is a template only; confirm required fields and whether the handler expects an ID in the body in HandleUpdateUser.",
@@ -555,6 +562,13 @@
               "path": [
                 "jobs",
                 "retry"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{jobId}}",
+                  "description": "Job ID to retry."
+                }
               ]
             },
             "description": "Authenticated. Retry a failed or retryable job. Body schema is not shown in main.go, so this request is left without a body until HandleRetryJob is checked."
