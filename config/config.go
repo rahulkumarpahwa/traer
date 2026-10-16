@@ -1,10 +1,12 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/rahulkumarpahwa/traer/bootstrap"
 )
 
@@ -72,12 +74,16 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 
 func Load() *Config {
 
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found; using system environment variables")
+	}
+
 	return &Config{
 		AppName: os.Getenv("APP_NAME"),
 		AppEnv:  os.Getenv("APP_ENV"),
 
-		AdminEmail:    os.Getenv("ADMINUSERNAME"),
-		AdminPassword: os.Getenv("ADMINPASSWORD"),
+		AdminEmail:    os.Getenv("ADMIN_USERNAME"),
+		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 
 		HTTPAddress:      os.Getenv("HTTP_SERVER_ADDRESS"),
 		HTTPReadTimeout:  time.Duration(getInt("HTTP_SERVER_READ_TIMEOUT", 60)) * time.Second,

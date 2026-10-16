@@ -1,4 +1,5 @@
 /build
+/bin
 
 # Secrets & local configuration (never commit real credentials)
 .env

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -19,12 +20,34 @@ func (s *UserStorage) CreateAdminUser(ctx context.Context, cfg *config.Config) e
 		return err
 	}
 
-	_, err = s.DB.ExecContext(ctx,
-		`INSERT INTO users (id, email, password_hash, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-		id, email, hashedPassword,
-	)
+	row := s.DB.QueryRowContext(ctx, `
+    SELECT id FROM users WHERE email = ?`, email)
 
-	slog.Info("admin user has been created.")
+	if row.Err() != nil && row.Err() != sql.ErrNoRows{
+		return row.Err()
+	}
+
+	var adminID string
+	err = row.Scan(&adminID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	if adminID == "" {
+		_, err = s.DB.ExecContext(ctx,
+			`INSERT INTO users (id, email, password_hash, created_at, updated_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+			id, email, hashedPassword,
+		)
+
+		if err != nil {
+			return err
+		}
+		slog.Info("admin user has been created.")
+
+		return nil
+	}
+
+	slog.Info("admin user already exists.")
 	return nil
 }

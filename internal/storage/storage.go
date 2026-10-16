@@ -14,18 +14,17 @@ type UserStorage struct {
 }
 
 type UserStorageInterface interface {
-	CreateUser(username, email, password string) error
-	UpdateUserByID(id int, username, password string) error
+	CreateUser(email, password string) error
+	UpdateUserByID(id int, password string) error
 	DeleteUserByID(id int) error
 	GetUserByID(id int) (*types.User, error)
 	GetUserByEmail(email string) (*types.User, error)
-	GetUserByUsername(username string) (*types.User, error)
 }
 
-func (u *UserStorage) CreateUser(username, email, password string) error {
+func (u *UserStorage) CreateUser(email, password string) error {
 	// Validate inputs
-	if username == "" || email == "" || password == "" {
-		return fmt.Errorf("username, email, and password cannot be empty")
+	if email == "" || password == "" {
+		return fmt.Errorf("email, and password cannot be empty")
 	}
 
 	// Hash the password using bcrypt
@@ -36,8 +35,8 @@ func (u *UserStorage) CreateUser(username, email, password string) error {
 
 	// Prepare the SQL statement
 	stmt, err := u.DB.Prepare(`
-		INSERT INTO users (username, email, password_hash)
-		VALUES (?, ?, ?)
+		INSERT INTO users (email, password_hash)
+		VALUES (?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %v", err)
@@ -45,7 +44,7 @@ func (u *UserStorage) CreateUser(username, email, password string) error {
 	defer stmt.Close() // Always close prepared statements
 
 	// Execute the prepared statement
-	_, err = stmt.Exec(username, email, string(hashedPassword))
+	_, err = stmt.Exec(email, string(hashedPassword))
 	if err != nil {
 		return fmt.Errorf("failed to execute statement: %v", err)
 	}
@@ -53,7 +52,7 @@ func (u *UserStorage) CreateUser(username, email, password string) error {
 	return nil
 }
 
-func (u *UserStorage) UpdateUserByID(id int, username, password string) error {
+func (u *UserStorage) UpdateUserByID(id int, password string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid user ID")
 	}
@@ -62,11 +61,6 @@ func (u *UserStorage) UpdateUserByID(id int, username, password string) error {
 	setClauses := []string{}
 	args := []interface{}{}
 
-	// If username is provided, add it to the update
-	if username != "" {
-		setClauses = append(setClauses, "username = ?")
-		args = append(args, username)
-	}
 
 	// If password is provided, hash it and add to the update
 	if password != "" {
@@ -132,14 +126,14 @@ func (u *UserStorage) GetUserByID(id int) (*types.User, error) {
 		return nil, fmt.Errorf("invalid user ID")
 	}
 
-	stmt, err := u.DB.Prepare(`SELECT id, username, email, password_hash, created_at, updated_at FROM users WHERE id = ?`)
+	stmt, err := u.DB.Prepare(`SELECT id, email, password_hash, created_at, updated_at FROM users WHERE id = ?`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare select: %v", err)
 	}
 	defer stmt.Close()
 
 	var user types.User
-	err = stmt.QueryRow(id).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
+	err = stmt.QueryRow(id).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil // No user found
 	} else if err != nil {
@@ -155,37 +149,14 @@ func (u *UserStorage) GetUserByEmail(email string) (*types.User, error) {
 		return nil, fmt.Errorf("email cannot be empty")
 	}
 
-	stmt, err := u.DB.Prepare(`SELECT id, username, email, password_hash, created_at, updated_at FROM users WHERE email = ?`)
+	stmt, err := u.DB.Prepare(`SELECT id, email, password_hash, created_at, updated_at FROM users WHERE email = ?`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare select: %v", err)
 	}
 	defer stmt.Close()
 
 	var user types.User
-	err = stmt.QueryRow(email).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to query user: %v", err)
-	}
-
-	return &user, nil
-}
-
-// GetUserByUsername retrieves a user by username
-func (u *UserStorage) GetUserByUsername(username string) (*types.User, error) {
-	if username == "" {
-		return nil, fmt.Errorf("username cannot be empty")
-	}
-
-	stmt, err := u.DB.Prepare(`SELECT id, username, email, password_hash, created_at, updated_at FROM users WHERE username = ?`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare select: %v", err)
-	}
-	defer stmt.Close()
-
-	var user types.User
-	err = stmt.QueryRow(username).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
+	err = stmt.QueryRow(email).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {

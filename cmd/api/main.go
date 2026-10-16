@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/rahulkumarpahwa/traer/config"
 	"github.com/rahulkumarpahwa/traer/internal/handlers"
 	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
@@ -19,10 +19,6 @@ import (
 )
 
 func main() {
-
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found; using system environment variables")
-	}
 
 	// setting up the configurations
 	cfg := config.Load()
@@ -54,7 +50,7 @@ func main() {
 	var uploader *nextcloud.Client
 	if cfg.NextcloudConfigured() {
 		uploader = nextcloud.NewClient(cfg.NextcloudURL, cfg.NextcloudUsername, cfg.NextcloudAppPassword)
-		log.Printf("[nextcloud] uploader configured for user %q (base path %q)", cfg.NextcloudUsername, cfg.NextcloudBasePath)
+		log.Printf("nextCloud uploader configured for user %q (base path %q)", cfg.NextcloudUsername, cfg.NextcloudBasePath)
 	} else {
 		log.Println("[nextcloud] uploader NOT configured; music jobs will be rejected until NEXTCLOUD_* env vars are set")
 	}
@@ -97,15 +93,16 @@ func main() {
 	router.Handle("DELETE /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleDeleteUser)))
 	router.Handle("GET /users/id", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByID)))
 	router.Handle("GET /users/email", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByEmail)))
-	router.Handle("GET /users/username", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleGetUserByUsername)))
 
 	server := http.Server{
-		Addr:         cfg.HTTPAddress,
+		Addr:         ":" + cfg.HTTPAddress,
 		Handler:      router,
 		ReadTimeout:  time.Duration(cfg.HTTPReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(cfg.HTTPWriteTimeout) * time.Second,
 		IdleTimeout:  time.Duration(cfg.HTTPIdleTimeout) * time.Second,
 	}
+
+	slog.Info("server started at port: ", cfg.HTTPAddress)
 
 	notifyChan := make(chan os.Signal, 1)
 

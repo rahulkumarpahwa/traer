@@ -12,8 +12,7 @@ import (
 
 // Claims defines the JWT payload
 type Claims struct {
-	UserID   int    `json:"user_id"`
-	Username string `json:"username"`
+	UserID   string   `json:"user_id"`
 	Email    string `json:"email"`
 	jwt.RegisteredClaims
 }
@@ -37,8 +36,7 @@ func GenerateJWT(user *types.User, config *config.Config) (*string, error) {
 	}
 
 	claims := &Claims{
-		UserID:   user.ID,
-		Username: user.Username,
+		UserID:   user.ID.String(),
 		Email:    user.Email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)), // 1 day expiry

@@ -1,0 +1,620 @@
+{
+  "info": {
+    "_postman_id": "traer-backend-collection-clean",
+    "name": "Traer Backend API",
+    "description": "Clean Postman collection for the Traer backend. Includes all six endpoints identified in the supplied collections: health, create job, active jobs, job status, download, and worker instances.\n\nSet the collection variable baseUrl to your server address if it is not http://localhost:8080. Run Create Job first; its test script saves the returned id to the jobId collection variable for the status and download requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082",
+      "type": "string",
+      "description": "Base URL of the Traer API; do not add a trailing slash."
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string",
+      "description": "Automatically populated after a successful Create Job response."
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string",
+      "description": "User ID used by user lookup/update/delete requests."
+    },
+    {
+      "key": "userEmail",
+      "value": "test@example.com",
+      "type": "string",
+      "description": "Email used by user lookup requests."
+    },
+    {
+      "key": "username",
+      "value": "testuser",
+      "type": "string",
+      "description": "Username used by login and lookup requests."
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Server Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Checks that the server is reachable. The supplied collection describes this as returning HTTP 200."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health endpoint responds successfully', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "description": "Public authentication and registration endpoints.",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Public registration endpoint. Example JSON is a best-effort template; confirm required fields in HandleCreateUser.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"email\": \"test@example.com\",\n  \"password\": \"ChangeMe123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "description": "Public login endpoint. Example JSON is a best-effort template; confirm required fields in HandleLogin. If the server uses a session cookie, Postman normally retains it in its cookie jar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"ChangeMe123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "logout"
+              ]
+            },
+            "description": "Public logout endpoint. Send after login; session/cookie behavior depends on the handler implementation."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "Authenticated user-management endpoints.",
+      "item": [
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/id?id={{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "id"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{userId}}",
+                  "description": "User ID to look up."
+                }
+              ]
+            },
+            "description": "Authenticated. Query parameter name `id` is inferred from the route name; confirm HandleGetUserByID for the exact parameter name."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by Email",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/email?email={{userEmail}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "email"
+              ],
+              "query": [
+                {
+                  "key": "email",
+                  "value": "{{userEmail}}",
+                  "description": "Email address to look up."
+                }
+              ]
+            },
+            "description": "Authenticated. Query parameter name `email` is inferred from the route name; confirm HandleGetUserByEmail for the exact parameter name."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by Username",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/username?username={{username}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "username"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "{{username}}",
+                  "description": "Username to look up."
+                }
+              ]
+            },
+            "description": "Authenticated. Query parameter name `username` is inferred from the route name; confirm HandleGetUserByUsername for the exact parameter name."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Authenticated user update endpoint. Example body is a template only; confirm required fields and whether the handler expects an ID in the body in HandleUpdateUser.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{userId}}\",\n  \"username\": \"updateduser\",\n  \"email\": \"updated@example.com\",\n  \"password\": \"NewChangeMe123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?id={{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{userId}}",
+                  "description": "User ID to delete."
+                }
+              ]
+            },
+            "description": "Authenticated user deletion endpoint. Query parameter `id` is a best-effort assumption; confirm whether HandleDeleteUser expects an ID in the query string or JSON body."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "Create Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://www.youtube.com/watch?v=REPLACE_WITH_VIDEO_ID\",\n  \"type\": \"audio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/jobs/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "create"
+              ]
+            },
+            "description": "Creates an asynchronous media-processing job. Replace the sample URL with a real, accessible video URL before sending. Supported types listed in the supplied collection are audio and video."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Create job returns a successful HTTP status', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  let data;",
+                  "  try { data = pm.response.json(); } catch (e) { data = null; }",
+                  "  pm.test('Create job response includes id, status, and progress', function () {",
+                  "    pm.expect(data, 'JSON response body').to.be.an('object');",
+                  "    pm.expect(data).to.have.property('id').that.is.a('string').and.not.empty;",
+                  "    pm.expect(data).to.have.property('status');",
+                  "    pm.expect(data).to.have.property('progress');",
+                  "  });",
+                  "  if (data && typeof data.id === 'string' && data.id.length > 0) {",
+                  "    pm.collectionVariables.set('jobId', data.id);",
+                  "    console.log('Saved jobId:', data.id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Active Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "active"
+              ]
+            },
+            "description": "Lists jobs that are queued or running, according to the supplied collection."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Active jobs endpoint responds successfully', function () {",
+                  "  pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  pm.test('Response is valid JSON', function () {",
+                  "    pm.expect(function () { pm.response.json(); }).to.not.throw();",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Job Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/status?id={{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{jobId}}",
+                  "description": "Automatically set by Create Job; alternatively enter a job ID manually."
+                }
+              ]
+            },
+            "description": "Gets the status and progress of the job identified by jobId. Create a job first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Job status endpoint responds successfully', function () {",
+                  "  pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  pm.test('Response is valid JSON', function () {",
+                  "    pm.expect(function () { pm.response.json(); }).to.not.throw();",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Completed File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/download?id={{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "download"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{jobId}}",
+                  "description": "Automatically set by Create Job; the job must be completed before download."
+                }
+              ]
+            },
+            "description": "Downloads the output for a completed job. The response is expected to be a file stream, not JSON."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Download endpoint returns a successful response', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 206]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/jobs/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "jobs",
+                "retry"
+              ]
+            },
+            "description": "Authenticated. Retry a failed or retryable job. Body schema is not shown in main.go, so this request is left without a body until HandleRetryJob is checked."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System Info",
+      "item": [
+        {
+          "name": "Get Worker Instances",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/instances/get",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instances",
+                "get"
+              ]
+            },
+            "description": "Returns the current worker instance count. The supplied collection suggests the response contains a numeric instances field."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Worker instances endpoint responds successfully', function () {",
+                  "  pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "});",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  pm.test('Response is valid JSON', function () {",
+                  "    pm.expect(function () { pm.response.json(); }).to.not.throw();",
+                  "  });",
+                  "  let data;",
+                  "  try { data = pm.response.json(); } catch (e) { data = null; }",
+                  "  if (data && Object.prototype.hasOwnProperty.call(data, 'instances')) {",
+                  "    pm.test('instances is numeric', function () {",
+                  "      pm.expect(data.instances).to.be.a('number');",
+                  "    });",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

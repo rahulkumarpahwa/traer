@@ -23,7 +23,6 @@ type UserHandler struct {
 
 // CreateUserRequest represents the JSON body for creating a user
 type CreateUserRequest struct {
-	Username string `json:"username,omitempty"`
 	Email    string `json:"email,omitempty"`
 	Password string `json:"password"`
 }
@@ -36,7 +35,6 @@ type UpdateUserRequest struct {
 
 // LoginRequest represents the JSON body for login
 type LoginRequest struct {
-	Username string `json:"username,omitempty"`
 	Email    string `json:"email,omitempty"`
 	Password string `json:"password"`
 }
@@ -55,7 +53,7 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate input: must have password and either username or email
-	if req.Password == "" || (req.Username == "" && req.Email == "") {
+	if req.Password == "" || req.Email == "" {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("must provide either username+password or email+password"))
 		return
 	}
@@ -64,11 +62,7 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var userObj interface{}
 	var err error
 
-	if req.Username != "" {
-		userObj, err = u.UserStorage.GetUserByUsername(req.Username)
-	} else {
-		userObj, err = u.UserStorage.GetUserByEmail(req.Email)
-	}
+	userObj, err = u.UserStorage.GetUserByEmail(req.Email)
 
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err)
@@ -165,7 +159,7 @@ func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Validate input: must have password and either username or email
-	if req.Password == "" || (req.Username == "" && req.Email == "") {
+	if req.Password == "" || req.Email == "" {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("must provide either username+password or email+password"))
 		return
 	}
@@ -183,19 +177,8 @@ func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if req.Username != "" {
-		existingUser, err := hs.UserStorage.GetUserByUsername(req.Username)
-		if err != nil {
-			utils.ErrorResponse(w, http.StatusInternalServerError, err)
-			return
-		}
-		if existingUser != nil {
-			utils.ErrorResponse(w, http.StatusConflict, fmt.Errorf("user with this username already exists"))
-			return
-		}
-	}
-
-	if err := hs.UserStorage.CreateUser(req.Username, req.Email, req.Password); err != nil {
+	
+	if err := hs.UserStorage.CreateUser(req.Email, req.Password); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -228,7 +211,7 @@ func (hs *UserHandler) HandleUpdateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := hs.UserStorage.UpdateUserByID(id, req.Username, req.Password); err != nil {
+	if err := hs.UserStorage.UpdateUserByID(id, req.Password); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -299,32 +282,6 @@ func (hs *UserHandler) HandleGetUserByEmail(w http.ResponseWriter, r *http.Reque
 	}
 
 	user, err := hs.UserStorage.GetUserByEmail(email)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, err)
-		return
-	}
-	if user == nil {
-		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("user not found"))
-		return
-	}
-
-	utils.JSONResponse(w, http.StatusOK, user)
-}
-
-// HandleGetUserByUsername handles GET /users/username?username=...
-func (hs *UserHandler) HandleGetUserByUsername(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		utils.ErrorResponse(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
-		return
-	}
-
-	username := r.URL.Query().Get("username")
-	if username == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("username is required"))
-		return
-	}
-
-	user, err := hs.UserStorage.GetUserByUsername(username)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err)
 		return
