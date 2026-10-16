@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	// "github.com/google/uuid"
+	// "github.com/rahulkumarpahwa/traer/internal/tdd"
+	"github.com/google/uuid"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -35,8 +38,8 @@ func (u *UserStorage) CreateUser(email, password string) error {
 
 	// Prepare the SQL statement
 	stmt, err := u.DB.Prepare(`
-		INSERT INTO users (email, password_hash)
-		VALUES (?, ?)
+		INSERT INTO users (id, email, password_hash)
+		VALUES (?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %v", err)
@@ -44,7 +47,7 @@ func (u *UserStorage) CreateUser(email, password string) error {
 	defer stmt.Close() // Always close prepared statements
 
 	// Execute the prepared statement
-	_, err = stmt.Exec(email, string(hashedPassword))
+	_, err = stmt.Exec(uuid.New(), email, string(hashedPassword))
 	if err != nil {
 		return fmt.Errorf("failed to execute statement: %v", err)
 	}
@@ -60,7 +63,6 @@ func (u *UserStorage) UpdateUserByID(id int, password string) error {
 	// Build query parts dynamically
 	setClauses := []string{}
 	args := []interface{}{}
-
 
 	// If password is provided, hash it and add to the update
 	if password != "" {
@@ -163,5 +165,11 @@ func (u *UserStorage) GetUserByEmail(email string) (*types.User, error) {
 		return nil, fmt.Errorf("failed to query user: %v", err)
 	}
 
-	return &user, nil
+	return &types.User{
+		ID:           user.ID,
+		Email:        user.Email,
+		PasswordHash: user.PasswordHash,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+	}, nil
 }

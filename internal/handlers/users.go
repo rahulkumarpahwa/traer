@@ -15,6 +15,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type User struct {
+}
+
 // UserHandler handles HTTP requests for user operations
 type UserHandler struct {
 	Config      *config.Config
@@ -59,24 +62,17 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch user from storage
-	var userObj interface{}
+	var user *types.User
 	var err error
 
-	userObj, err = u.UserStorage.GetUserByEmail(req.Email)
+	user, err = u.UserStorage.GetUserByEmail(req.Email)
 
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err)
 		return
 	}
-	if userObj == nil {
+	if user == nil {
 		utils.ErrorResponse(w, http.StatusUnauthorized, fmt.Errorf("invalid credentials"))
-		return
-	}
-
-	// Type assert to *types.User
-	user, ok := userObj.(*types.User) // Replace with actual type, e.g., *types.User
-	if !ok {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("internal type assertion error"))
 		return
 	}
 
@@ -108,7 +104,7 @@ func (u *UserHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	utils.JSONResponse(w, http.StatusOK, map[string]string{
 		"message": "login successful",
-		"user_id": fmt.Sprintf("%d", user.ID),
+		"user_id": user.ID.String(),
 	})
 }
 
@@ -177,7 +173,6 @@ func (hs *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	
 	if err := hs.UserStorage.CreateUser(req.Email, req.Password); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err)
 		return
