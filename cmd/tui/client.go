@@ -7,46 +7,71 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
 
-// Client is a thin HTTP client for the Traer backend. It mirrors the endpoints
-// used by the previous Wails bridge and keeps the JWT session in a cookie jar,
-// exactly like the backend issues it (an HttpOnly "token" cookie).
+// Client is a thin HTTP client for the live Traer backend routes (see
+// postman_collection.json):
+//
+//	GET    /              health check (no auth)
+//	POST   /login         {email,password} -> sets HttpOnly "token" cookie
+//	POST   /users         {email,password} registration (no auth)
+//	POST   /logout        clears the session cookie
+//	POST   /jobs/create   {urls,process_type} (auth)
+//	GET    /jobs          list all jobs (auth)
+//
+// The backend routes that are commented out in cmd/api/main.go
+// (/jobs/status, /jobs/retry, /jobs/download, /instances/get) intentionally
+// have no client methods here so the TUI never calls endpoints that 404.
 type Client struct {
 	BaseURL string
 	http    *http.Client
 }
 
-// Job is the subset of the backend job model the TUI needs to render status,
-// progress, upload state, and errors.
+// processTypes mirrors the process_type values accepted by POST /jobs/create
+// (see internal/handlers/job.go and internal/types/job.go).
+var processTypes = []string{"audio", "video", "playlist", "upload", "transcription"}
+
+// Job status values returned by GET /jobs (internal/types.JobStatus).
+const (
+	statusNotStarted = "not_started"
+	statusQueued     = "queued"
+	statusRunning    = "running"
+	statusUploading  = "uploading"
+	statusUploaded   = "uploaded"
+	statusCompleted  = "completed"
+	statusFailed     = "failed"
+)
+
+// Job mirrors tdd.GetProcess, the element shape of the GET /jobs response.
 type Job struct {
-	ID          string  `json:"id"`
-	URL         string  `json:"url"`
-	Type        string  `json:"type"`
-	Status      string  `json:"status"`
-	Progress    float64 `json:"progress"`
-	Output      string  `json:"output"`
-	Error       string  `json:"error"`
-	Uploaded    bool    `json:"uploaded"`
-	UploadError string  `json:"uploadError"`
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	URL         string    `json:"url"`
+	Status      string    `json:"status"`
+	ProcessType string    `json:"process_type"`
+	Retries     int       `json:"retries"`
+	Uploaded    bool      `json:"uploaded"`
+	TempPath    string    `json:"temp_path"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// FileName returns the base name of the job output, if any.
-func (j Job) FileName() string {
-	if strings.TrimSpace(j.Output) == "" {
-		return ""
-	}
-	trimmed := strings.TrimSpace(j.Output)
-	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
-		return r == '/' || r == '\\'
-	})
-	if len(parts) == 0 {
-		return trimmed
-	}
-	return parts[len(parts)-1]
+// loginResponse is the JSON body of a successful POST /login.
+type loginResponse struct {
+	Message string `json:"message"`
+	UserID  string `json:"user_id"`
+}
+
+// youTubeRegex mirrors internal/validators.IsYouTubeURL so obviously bad
+// links are rejected before they hit the backend.
+var youTubeRegex = regexp.MustCompile(`^(https?://)?(www\.|music\.)?(youtube\.com|youtu\.be)/.+`)
+
+// IsYouTubeURL reports whether raw looks like a YouTube / YouTube Music link.
+func IsYouTubeURL(raw string) bool {
+	return youTubeRegex.MatchString(raw)
 }
 
 // NewClient builds a backend client with a cookie jar for session handling.
@@ -108,81 +133,58 @@ func (c *Client) doJSON(method, path string, body interface{}, out interface{}) 
 	return resp.StatusCode, nil
 }
 
-// Login authenticates with a username/email + password and stores the session
-// cookie returned by the backend.
-func (c *Client) Login(identifier, password string) error {
-	payload := map[string]string{"password": password}
-	if strings.Contains(identifier, "@") {
-		payload["email"] = identifier
-	} else {
-		payload["username"] = identifier
-	}
-	_, err := c.doJSON(http.MethodPost, "/login", payload, nil)
+// Health pings GET / to verify the backend is reachable.
+func (c *Client) Health() error {
+	_, err := c.doJSON(http.MethodGet, "/", nil, nil)
 	return err
 }
 
-// Signup registers a new account. It does not sign you in automatically.
-func (c *Client) Signup(username, email, password string) error {
-	payload := map[string]string{"password": password}
-	if username != "" {
-		payload["username"] = username
+// Login authenticates with email + password (the only credential shape the
+// backend accepts) and stores the session cookie returned by the backend.
+// It returns the user ID reported by the backend.
+func (c *Client) Login(email, password string) (string, error) {
+	payload := map[string]string{"email": email, "password": password}
+	var out loginResponse
+	if _, err := c.doJSON(http.MethodPost, "/login", payload, &out); err != nil {
+		return "", err
 	}
-	if email != "" {
-		payload["email"] = email
-	}
+	return out.UserID, nil
+}
+
+// Signup registers a new account with email + password. It does not sign you
+// in automatically; the backend only sets the session cookie on /login.
+func (c *Client) Signup(email, password string) error {
+	payload := map[string]string{"email": email, "password": password}
 	_, err := c.doJSON(http.MethodPost, "/users", payload, nil)
 	return err
 }
 
-// CreateMusicJobs queues one or more YouTube/YouTube Music URLs for MP3
-// extraction and upload to Nextcloud. It returns the created jobs.
-func (c *Client) CreateMusicJobs(urls []string) ([]Job, error) {
-	payload := map[string]interface{}{
-		"urls": urls,
-		"type": "music",
-	}
-
-	var batch struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-		Jobs   []Job  `json:"jobs"`
-	}
-	status, err := c.doJSON(http.MethodPost, "/jobs/create", payload, &batch)
-	if err != nil {
-		return nil, err
-	}
-	_ = status
-
-	if len(batch.Jobs) > 0 {
-		return batch.Jobs, nil
-	}
-
-	// Backend returns a single job object when only one URL was accepted.
-	var single Job
-	if _, err := c.doJSON(http.MethodPost, "/jobs/create", payload, &single); err == nil && single.ID != "" {
-		return []Job{single}, nil
-	}
-	return nil, fmt.Errorf("backend did not return any jobs")
-}
-
-// ActiveJobs returns jobs that are queued, running, or uploading.
-func (c *Client) ActiveJobs() ([]Job, error) {
-	var jobs []Job
-	_, err := c.doJSON(http.MethodGet, "/jobs/active", nil, &jobs)
-	return jobs, err
-}
-
-// JobStatus returns the current state of a single job.
-func (c *Client) JobStatus(id string) (Job, error) {
-	var job Job
-	_, err := c.doJSON(http.MethodGet, "/jobs/status?id="+url.QueryEscape(id), nil, &job)
-	return job, err
-}
-
-// RetryJob re-queues a previously failed job.
-func (c *Client) RetryJob(id string) error {
-	_, err := c.doJSON(http.MethodPost, "/jobs/retry?id="+url.QueryEscape(id), nil, nil)
+// Logout clears the session cookie on the backend. The backend returns 401
+// when no cookie is present, which callers may treat as "already signed out".
+func (c *Client) Logout() error {
+	_, err := c.doJSON(http.MethodPost, "/logout", nil, nil)
 	return err
+}
+
+// CreateJobs queues one or more YouTube URLs for processing with the given
+// process type (one of processTypes). The backend responds with a plain JSON
+// string message rather than job objects, so callers should refresh the job
+// list via ListJobs afterwards. It returns the backend's message.
+func (c *Client) CreateJobs(urls []string, processType string) (string, error) {
+	payload := map[string]interface{}{
+		"urls":         urls,
+		"process_type": processType,
+	}
+	var message string
+	_, err := c.doJSON(http.MethodPost, "/jobs/create", payload, &message)
+	return message, err
+}
+
+// ListJobs returns all jobs known to the backend (GET /jobs).
+func (c *Client) ListJobs() ([]Job, error) {
+	var jobs []Job
+	_, err := c.doJSON(http.MethodGet, "/jobs", nil, &jobs)
+	return jobs, err
 }
 
 // splitUrls parses a free-form blob of text (newlines, commas, spaces) into a

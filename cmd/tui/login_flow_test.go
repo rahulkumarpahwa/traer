@@ -26,15 +26,15 @@ func press(m model, keyType tea.KeyType) (model, tea.Cmd) {
 }
 
 func TestLoginTypingAndSubmit(t *testing.T) {
-	srv := newMockBackend(t, "alice", "secret")
+	srv := newMockBackend(t, "alice@example.com", "secret")
 	defer srv.Close()
 
 	m := newModel(NewClient(srv.URL))
 
-	// Type the identifier (login mode, focus starts at 0 = identifier).
-	m, _ = typeKeys(m, "alice")
-	if m.identifier.Value() != "alice" {
-		t.Fatalf("identifier not captured, got %q", m.identifier.Value())
+	// Type the email (login mode, focus starts at 0 = email).
+	m, _ = typeKeys(m, "alice@example.com")
+	if m.email.Value() != "alice@example.com" {
+		t.Fatalf("email not captured, got %q", m.email.Value())
 	}
 
 	// Tab to password.
@@ -67,10 +67,10 @@ func TestLoginTypingAndSubmit(t *testing.T) {
 	}
 }
 
-// TestSignupFlowThroughModel drives the 3-field signup form (username, email,
-// password) via tab navigation and submit, then logs in.
+// TestSignupFlowThroughModel drives the 2-field signup form (email, password)
+// via tab navigation and submit, then returns to sign-in mode.
 func TestSignupFlowThroughModel(t *testing.T) {
-	srv := newMockBackend(t, "alice", "secret")
+	srv := newMockBackend(t, "alice@example.com", "secret")
 	defer srv.Close()
 
 	m := newModel(NewClient(srv.URL))
@@ -84,23 +84,16 @@ func TestSignupFlowThroughModel(t *testing.T) {
 		t.Fatalf("expected focus reset to 0 on mode switch, got %d", m.loginFocus)
 	}
 
-	// username (focus 0)
-	m, _ = typeKeys(m, "alice")
-	if m.username.Value() != "alice" {
-		t.Fatalf("username not captured, got %q", m.username.Value())
-	}
-
-	// tab -> email (focus 1)
-	m, _ = press(m, tea.KeyTab)
+	// email (focus 0)
 	m, _ = typeKeys(m, "alice@example.com")
 	if m.email.Value() != "alice@example.com" {
 		t.Fatalf("email not captured, got %q", m.email.Value())
 	}
 
-	// tab -> password (focus 2)
+	// tab -> password (focus 1)
 	m, _ = press(m, tea.KeyTab)
-	if m.loginFocus != 2 {
-		t.Fatalf("expected focus 2, got %d", m.loginFocus)
+	if m.loginFocus != 1 {
+		t.Fatalf("expected focus 1 after tab, got %d", m.loginFocus)
 	}
 	m, _ = typeKeys(m, "secret")
 	if m.password.Value() != "secret" {

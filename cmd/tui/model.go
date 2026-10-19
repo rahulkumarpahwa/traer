@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,21 +25,25 @@ const (
 	focusJobs
 )
 
+// maxTrackedJobs caps how many jobs the TUI keeps in memory for display.
+const maxTrackedJobs = 50
+
 // ---- async result messages ----
 
-type loginResultMsg struct{ err error }
+type healthResultMsg struct{ err error }
+type loginResultMsg struct {
+	userID string
+	err    error
+}
 type signupResultMsg struct{ err error }
+type logoutResultMsg struct{ err error }
 type queuedMsg struct {
-	jobs []Job
-	err  error
+	count int
+	err   error
 }
 type refreshedMsg struct {
 	jobs []Job
 	err  error
-}
-type retryResultMsg struct {
-	id  string
-	err error
 }
 type tickMsg time.Time
 
@@ -46,19 +51,23 @@ type model struct {
 	client *Client
 	screen screen
 
-	// login / signup
-	identifier textinput.Model
-	username   textinput.Model
+	// login / signup — the backend only accepts email+password credentials,
+	// so both modes share the same two fields.
 	email      textinput.Model
 	password   textinput.Model
+	loginFocus int // 0 email, 1 password
 	signupMode bool
-	loginFocus int // 0 identifier/username, 1 email (signup), 2 password
 
-	// main
-	urls      textarea.Model
-	jobs      []Job
-	jobIndex  int
-	mainFocus focusArea
+	// main screen
+	urls         textarea.Model
+	processIndex int
+	jobs         []Job
+	jobIndex     int
+	mainFocus    focusArea
+
+	// session
+	userID    string
+	backendOK bool
 
 	spinner spinner.Model
 	loading bool
@@ -69,20 +78,11 @@ type model struct {
 }
 
 func newModel(client *Client) model {
-	identifier := textinput.New()
-	identifier.Placeholder = "username or email"
-	identifier.Focus()
-	identifier.CharLimit = 128
-	identifier.Width = 40
-	username := textinput.New()
-	username.Placeholder = "username"
-	username.CharLimit = 64
-	username.Width = 40
-
 	email := textinput.New()
 	email.Placeholder = "you@example.com"
 	email.CharLimit = 128
 	email.Width = 40
+	email.Focus()
 
 	password := textinput.New()
 	password.Placeholder = "password"
@@ -99,61 +99,41 @@ func newModel(client *Client) model {
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = statusUploading
+	sp.Style = spinnerStyle
 
 	return model{
-		client:     client,
-		screen:     screenLogin,
-		identifier: identifier,
-		username:   username,
-		email:      email,
-		password:   password,
-		urls:       urls,
-		spinner:    sp,
+		client:   client,
+		screen:   screenLogin,
+		email:    email,
+		password: password,
+		urls:     urls,
+		spinner:  sp,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
-}
-
-// loginFieldCount returns the number of active login inputs for the current
-// mode. It deliberately returns a count (not pointers into a copy) so callers
-// never mutate a throwaway value.
-func (m model) loginFieldCount() int {
-	if m.signupMode {
-		return 3 // username, email, password
-	}
-	return 2 // identifier, password
+	return tea.Batch(textinput.Blink, m.checkBackend())
 }
 
 // focusLoginField focuses the real fields on the model. It must use the pointer
 // receiver and address m's own fields directly; going through a value-receiver
 // helper would return pointers into a discarded copy and focus nothing.
 func (m *model) focusLoginField() {
-	m.identifier.Blur()
-	m.username.Blur()
 	m.email.Blur()
 	m.password.Blur()
-
-	if m.signupMode {
-		switch m.loginFocus {
-		case 0:
-			m.username.Focus()
-		case 1:
-			m.email.Focus()
-		default:
-			m.password.Focus()
-		}
-		return
-	}
-
-	switch m.loginFocus {
-	case 0:
-		m.identifier.Focus()
-	default:
+	if m.loginFocus == 0 {
+		m.email.Focus()
+	} else {
 		m.password.Focus()
 	}
+}
+
+// currentProcessType returns the process_type selected for new jobs.
+func (m model) currentProcessType() string {
+	if m.processIndex < 0 || m.processIndex >= len(processTypes) {
+		return processTypes[0]
+	}
+	return processTypes[m.processIndex]
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -172,10 +152,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tickMsg:
-		// Poll active jobs on the main screen.
+		// Poll the job list on the main screen.
 		if m.screen == screenMain {
 			return m, tea.Batch(m.refreshJobs(), tickCmd())
 		}
+		return m, nil
+
+	case healthResultMsg:
+		m.backendOK = msg.err == nil
 		return m, nil
 
 	case loginResultMsg:
@@ -185,6 +169,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = ""
+		m.userID = msg.userID
 		m.screen = screenMain
 		m.notice = "Signed in. Paste links and press ctrl+s to queue."
 		m.urls.Focus()
@@ -203,6 +188,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.focusLoginField()
 		return m, nil
 
+	case logoutResultMsg:
+		m.loading = false
+		m.userID = ""
+		m.jobs = nil
+		m.jobIndex = 0
+		m.screen = screenLogin
+		m.signupMode = false
+		m.loginFocus = 0
+		m.email.SetValue("")
+		m.password.SetValue("")
+		m.focusLoginField()
+		if msg.err != nil {
+			// The backend 401s when the cookie is already gone; either way
+			// there is no session left, so still land on the login screen.
+			m.err = "Signed out (" + msg.err.Error() + ")"
+		} else {
+			m.err = ""
+			m.notice = "Signed out."
+		}
+		return m, textinput.Blink
+
 	case queuedMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -210,8 +216,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = ""
-		m.notice = "Queued " + itoa(len(msg.jobs)) + " music job(s) for Nextcloud upload."
-		m.mergeJobs(msg.jobs)
+		m.notice = "Queued " + strconv.Itoa(msg.count) + " job(s) as " + m.currentProcessType() + "."
+		m.urls.SetValue("")
 		return m, m.refreshJobs()
 
 	case refreshedMsg:
@@ -221,18 +227,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = ""
-		m.mergeJobs(msg.jobs)
+		m.setJobs(msg.jobs)
 		return m, nil
-
-	case retryResultMsg:
-		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err.Error()
-			return m, nil
-		}
-		m.err = ""
-		m.notice = "Retrying job " + msg.id
-		return m, m.refreshJobs()
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -243,7 +239,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ctrl+c always quits. The bare 'q' key is intentionally NOT a global quit
-	// here because it is a valid character in usernames/passwords/URLs; quitting
+	// here because it is a valid character in emails/passwords/URLs; quitting
 	// on 'q' is handled contextually in the job-list view instead.
 	if msg.String() == "ctrl+c" {
 		return m, tea.Quit
@@ -262,8 +258,7 @@ func (m model) handleLoginKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if msg.String() == "up" {
 			dir = -1
 		}
-		count := m.loginFieldCount()
-		m.loginFocus = (m.loginFocus + dir + count) % count
+		m.loginFocus = (m.loginFocus + dir + 2) % 2
 		m.focusLoginField()
 		return m, textinput.Blink
 	case "ctrl+t":
@@ -277,45 +272,40 @@ func (m model) handleLoginKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	switch m.loginFocus {
-	case 0:
-		if m.signupMode {
-			m.username, cmd = m.username.Update(msg)
-		} else {
-			m.identifier, cmd = m.identifier.Update(msg)
-		}
-	case 1:
-		if m.signupMode {
-			m.email, cmd = m.email.Update(msg)
-		} else {
-			m.password, cmd = m.password.Update(msg)
-		}
-	case 2:
+	if m.loginFocus == 0 {
+		m.email, cmd = m.email.Update(msg)
+	} else {
 		m.password, cmd = m.password.Update(msg)
 	}
 	return m, cmd
 }
 
+// submitLogin validates the email+password form and either registers
+// (POST /users) or signs in (POST /login), depending on the active mode.
 func (m model) submitLogin() (tea.Model, tea.Cmd) {
 	m.err = ""
-	m.loading = true
-	client := m.client
+	email := strings.TrimSpace(m.email.Value())
+	password := m.password.Value()
 
-	if m.signupMode {
-		username := strings.TrimSpace(m.username.Value())
-		email := strings.TrimSpace(m.email.Value())
-		password := m.password.Value()
-		return m, func() tea.Msg {
-			err := client.Signup(username, email, password)
-			return signupResultMsg{err: err}
-		}
+	if !strings.Contains(email, "@") {
+		m.err = "Enter a valid email address."
+		return m, nil
+	}
+	if password == "" {
+		m.err = "Password is required."
+		return m, nil
 	}
 
-	identifier := strings.TrimSpace(m.identifier.Value())
-	password := m.password.Value()
+	m.loading = true
+	client := m.client
+	if m.signupMode {
+		return m, func() tea.Msg {
+			return signupResultMsg{err: client.Signup(email, password)}
+		}
+	}
 	return m, func() tea.Msg {
-		err := client.Login(identifier, password)
-		return loginResultMsg{err: err}
+		userID, err := client.Login(email, password)
+		return loginResultMsg{userID: userID, err: err}
 	}
 }
 
@@ -331,10 +321,20 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, textinput.Blink
 	case "ctrl+s":
-		return m.submitMusic()
+		return m.submitJobs()
 	case "ctrl+r":
 		m.loading = true
-		return m, m.refreshJobs()
+		return m, tea.Batch(m.refreshJobs(), m.checkBackend())
+	case "ctrl+p":
+		m.processIndex = (m.processIndex + 1) % len(processTypes)
+		m.notice = "Process type: " + m.currentProcessType()
+		return m, nil
+	case "ctrl+o":
+		m.loading = true
+		client := m.client
+		return m, func() tea.Msg {
+			return logoutResultMsg{err: client.Logout()}
+		}
 	}
 
 	if m.mainFocus == focusURLs {
@@ -355,72 +355,60 @@ func (m model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.jobIndex < len(m.jobs)-1 {
 			m.jobIndex++
 		}
-	case "r":
-		if m.jobIndex >= 0 && m.jobIndex < len(m.jobs) {
-			id := m.jobs[m.jobIndex].ID
-			m.loading = true
-			client := m.client
-			return m, func() tea.Msg {
-				err := client.RetryJob(id)
-				return retryResultMsg{id: id, err: err}
-			}
-		}
 	}
 	return m, nil
 }
 
-func (m model) submitMusic() (tea.Model, tea.Cmd) {
+// submitJobs validates the pasted links and queues them through
+// POST /jobs/create with the selected process_type.
+func (m model) submitJobs() (tea.Model, tea.Cmd) {
 	urls := splitUrls(m.urls.Value())
 	if len(urls) == 0 {
 		m.err = "Add at least one YouTube or YouTube Music link."
 		return m, nil
 	}
+	for _, u := range urls {
+		if !IsYouTubeURL(u) {
+			m.err = "Not a YouTube link: " + u
+			return m, nil
+		}
+	}
 	m.err = ""
 	m.loading = true
 	client := m.client
+	processType := m.currentProcessType()
 	return m, func() tea.Msg {
-		jobs, err := client.CreateMusicJobs(urls)
-		return queuedMsg{jobs: jobs, err: err}
+		_, err := client.CreateJobs(urls, processType)
+		return queuedMsg{count: len(urls), err: err}
 	}
 }
 
-// refreshJobs fetches active jobs and returns them as a message.
+// refreshJobs fetches the full job list (GET /jobs) and returns it as a
+// message.
 func (m model) refreshJobs() tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
-		jobs, err := client.ActiveJobs()
+		jobs, err := client.ListJobs()
 		return refreshedMsg{jobs: jobs, err: err}
 	}
 }
 
-// mergeJobs folds refreshed/queued jobs into the tracked list without dropping
-// jobs that are no longer "active" (so completed/failed ones remain visible).
-func (m *model) mergeJobs(incoming []Job) {
-	byID := make(map[string]Job, len(incoming))
-	for _, j := range incoming {
-		byID[j.ID] = j
+// checkBackend pings GET / and reports reachability.
+func (m model) checkBackend() tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		return healthResultMsg{err: client.Health()}
 	}
+}
 
-	seen := map[string]bool{}
-	merged := make([]Job, 0, len(m.jobs)+len(incoming))
-	for _, existing := range m.jobs {
-		if j, ok := byID[existing.ID]; ok {
-			merged = append(merged, j)
-			seen[existing.ID] = true
-		} else {
-			merged = append(merged, existing)
-		}
+// setJobs replaces the tracked job list with the server's view (the backend
+// returns every job, not just active ones), keeping the list bounded and the
+// selection index valid.
+func (m *model) setJobs(jobs []Job) {
+	if len(jobs) > maxTrackedJobs {
+		jobs = jobs[len(jobs)-maxTrackedJobs:]
 	}
-	for _, j := range incoming {
-		if !seen[j.ID] {
-			merged = append(merged, j)
-		}
-	}
-
-	if len(merged) > 50 {
-		merged = merged[len(merged)-50:]
-	}
-	m.jobs = merged
+	m.jobs = jobs
 	if m.jobIndex >= len(m.jobs) {
 		m.jobIndex = len(m.jobs) - 1
 	}
@@ -433,26 +421,4 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

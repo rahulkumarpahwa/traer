@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,16 +26,26 @@ func TestSplitUrls(t *testing.T) {
 	}
 }
 
-func TestJobFileName(t *testing.T) {
-	cases := map[string]string{
-		"downloads/My Song.mp3": "My Song.mp3",
-		`downloads\Track.mp3`:   "Track.mp3",
-		"":                      "",
-		"plain.mp3":             "plain.mp3",
+func TestIsYouTubeURL(t *testing.T) {
+	valid := []string{
+		"https://youtu.be/dQw4w9WgXcQ",
+		"https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+		"https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+		"youtube.com/watch?v=abc",
 	}
-	for in, want := range cases {
-		if got := (Job{Output: in}).FileName(); got != want {
-			t.Errorf("Job{Output:%q}.FileName() = %q, want %q", in, got, want)
+	for _, u := range valid {
+		if !IsYouTubeURL(u) {
+			t.Errorf("IsYouTubeURL(%q) = false, want true", u)
+		}
+	}
+	invalid := []string{
+		"https://example.com/video.mp4",
+		"not a url",
+		"https://vimeo.com/12345",
+	}
+	for _, u := range invalid {
+		if IsYouTubeURL(u) {
+			t.Errorf("IsYouTubeURL(%q) = true, want false", u)
 		}
 	}
 }
@@ -58,67 +69,62 @@ func TestModelStartsOnLogin(t *testing.T) {
 
 func TestLoginToMainTransition(t *testing.T) {
 	m := newModel(NewClient("http://example.test"))
-	m.identifier.SetValue("alice")
+	m.email.SetValue("alice@example.com")
 	m.password.SetValue("secret")
 
 	next, _ := m.submitLogin()
 	// submitLogin returns a command; simulate its successful result.
-	updated, _ := next.Update(loginResultMsg{err: nil})
+	updated, _ := next.Update(loginResultMsg{userID: "u1", err: nil})
 	mm := updated.(model)
 	if mm.screen != screenMain {
 		t.Fatalf("expected screen to switch to main after login, got %v", mm.screen)
 	}
-	if !strings.Contains(mm.View(), "Music") {
-		t.Errorf("main view missing music heading:\n%s", mm.View())
+	if !strings.Contains(mm.View(), "Jobs") {
+		t.Errorf("main view missing jobs heading:\n%s", mm.View())
 	}
 }
 
-func TestSubmitMusicValidatesInput(t *testing.T) {
+func TestSubmitJobsValidatesInput(t *testing.T) {
 	m := newModel(NewClient("http://example.test"))
 	m.screen = screenMain
-	m.urls.SetValue("   ") // only whitespace
 
-	next, _ := m.submitMusic()
-	mm := next.(model)
-	if mm.err == "" {
+	// Only whitespace.
+	m.urls.SetValue("   ")
+	next, _ := m.submitJobs()
+	if mm := next.(model); mm.err == "" {
 		t.Errorf("expected an error when no URLs are provided")
 	}
+
+	// A non-YouTube URL must be rejected before hitting the backend.
+	m.urls.SetValue("https://example.com/video.mp4")
+	next, _ = m.submitJobs()
+	if mm := next.(model); mm.err == "" {
+		t.Errorf("expected an error for a non-YouTube URL")
+	}
 }
 
-func TestMergeJobsDedupAndPreserve(t *testing.T) {
+func TestSetJobsCapsAndClamps(t *testing.T) {
 	m := newModel(NewClient("http://example.test"))
 	m.screen = screenMain
 
-	// Seed with a completed job that will no longer appear in "active".
-	m.mergeJobs([]Job{{ID: "done-1", Status: "done", Uploaded: true}})
-
-	// Active refresh returns a running job plus an update to nothing new.
-	m.mergeJobs([]Job{{ID: "run-1", Status: "running", Progress: 40}})
-
-	if len(m.jobs) != 2 {
-		t.Fatalf("expected 2 jobs after merge, got %d", len(m.jobs))
+	// More jobs than the cap: only the newest maxTrackedJobs are kept.
+	var many []Job
+	for i := 0; i < maxTrackedJobs+10; i++ {
+		many = append(many, Job{ID: "job-" + strconv.Itoa(i), Status: statusQueued})
+	}
+	m.setJobs(many)
+	if len(m.jobs) != maxTrackedJobs {
+		t.Fatalf("expected %d jobs after cap, got %d", maxTrackedJobs, len(m.jobs))
+	}
+	if m.jobs[0].ID != "job-10" {
+		t.Errorf("expected newest jobs to be kept, first = %q", m.jobs[0].ID)
 	}
 
-	// Refresh again with an update to run-1; done-1 must be preserved.
-	m.mergeJobs([]Job{{ID: "run-1", Status: "done", Uploaded: true}})
-	if len(m.jobs) != 2 {
-		t.Fatalf("expected 2 jobs after second merge, got %d", len(m.jobs))
-	}
-
-	var sawDone, sawRun bool
-	for _, j := range m.jobs {
-		switch j.ID {
-		case "done-1":
-			sawDone = true
-		case "run-1":
-			sawRun = true
-			if !j.Uploaded {
-				t.Errorf("run-1 should have been updated to uploaded")
-			}
-		}
-	}
-	if !sawDone || !sawRun {
-		t.Errorf("merge lost a job: sawDone=%v sawRun=%v", sawDone, sawRun)
+	// A stale selection index must be clamped when the list shrinks.
+	m.jobIndex = 40
+	m.setJobs([]Job{{ID: "only", Status: statusCompleted}})
+	if m.jobIndex != 0 {
+		t.Errorf("expected jobIndex clamped to 0, got %d", m.jobIndex)
 	}
 }
 
@@ -138,14 +144,27 @@ func TestHandleMainKeyToggleFocus(t *testing.T) {
 	}
 }
 
-func TestProgressBarBounds(t *testing.T) {
-	if got := progressBar(-10, 10); strings.Contains(got, "█") {
-		t.Errorf("progressBar(-10) should be empty, got %q", got)
+func TestProcessTypeCycles(t *testing.T) {
+	m := newModel(NewClient("http://example.test"))
+	m.screen = screenMain
+
+	if m.currentProcessType() != "audio" {
+		t.Fatalf("expected default process type audio, got %q", m.currentProcessType())
 	}
-	if got := progressBar(150, 10); len([]rune(got)) != 10 {
-		t.Errorf("progressBar(150) width = %d, want 10", len([]rune(got)))
+
+	// ctrl+p advances to the next backend-supported process type.
+	next, _ := m.handleMainKey(tea.KeyMsg{Type: tea.KeyCtrlP})
+	mm := next.(model)
+	if mm.currentProcessType() != "video" {
+		t.Fatalf("expected video after one cycle, got %q", mm.currentProcessType())
 	}
-	if got := progressBar(50, 10); strings.Count(got, "█") != 5 {
-		t.Errorf("progressBar(50) filled = %d, want 5", strings.Count(got, "█"))
+
+	// Cycling wraps around to the start after the last type.
+	for i := 1; i < len(processTypes); i++ {
+		next, _ = mm.handleMainKey(tea.KeyMsg{Type: tea.KeyCtrlP})
+		mm = next.(model)
+	}
+	if mm.currentProcessType() != processTypes[0] {
+		t.Fatalf("expected wrap-around to %q, got %q", processTypes[0], mm.currentProcessType())
 	}
 }

@@ -43,58 +43,38 @@ var (
 			BorderForeground(lipgloss.Color("86")).
 			Padding(0, 1)
 
-	statusQueued    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	statusRunning   = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	statusUploading = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	statusDone      = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))
-	statusFailed    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	activeTagStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("86")).
+			Bold(true)
 
-	jobSourceStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
+
+	// One style per job status returned by GET /jobs (types.JobStatus).
+	styleNotStarted = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	styleQueued     = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	styleRunning    = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	styleUploading  = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	styleUploaded   = lipgloss.NewStyle().Foreground(lipgloss.Color("79"))
+	styleCompleted  = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))
+	styleFailed     = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 )
 
 // statusStyle returns the colorized style for a job status pill.
 func statusStyle(status string) lipgloss.Style {
 	switch status {
-	case "running":
-		return statusRunning
-	case "uploading":
-		return statusUploading
-	case "done":
-		return statusDone
-	case "failed":
-		return statusFailed
+	case statusRunning:
+		return styleRunning
+	case statusUploading:
+		return styleUploading
+	case statusUploaded:
+		return styleUploaded
+	case statusCompleted:
+		return styleCompleted
+	case statusFailed:
+		return styleFailed
+	case statusNotStarted:
+		return styleNotStarted
 	default:
-		return statusQueued
+		return styleQueued
 	}
-}
-
-// progressBar renders a fixed-width textual progress bar for a 0–100 value.
-func progressBar(progress float64, width int) string {
-	if width < 4 {
-		width = 4
-	}
-	if progress < 0 {
-		progress = 0
-	}
-	if progress > 100 {
-		progress = 100
-	}
-	filled := int((progress / 100) * float64(width))
-	if filled > width {
-		filled = width
-	}
-	bar := lipgloss.NewStyle().Foreground(lipgloss.Color("78")).Render(repeat("█", filled))
-	track := lipgloss.NewStyle().Foreground(lipgloss.Color("238")).Render(repeat("░", width-filled))
-	return bar + track
-}
-
-func repeat(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	out := make([]byte, 0, len(s)*n)
-	for i := 0; i < n; i++ {
-		out = append(out, s...)
-	}
-	return string(out)
 }

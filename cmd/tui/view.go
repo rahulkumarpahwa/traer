@@ -1,6 +1,7 @@
-			package main
-					
+package main
+
 import (
+	"strconv"
 	"strings"
 )
 
@@ -9,6 +10,15 @@ func (m model) View() string {
 		return m.viewLogin()
 	}
 	return m.viewMain()
+}
+
+// backendIndicator renders the base URL with a reachability hint.
+func (m model) backendIndicator() string {
+	state := "unreachable"
+	if m.backendOK {
+		state = "ok"
+	}
+	return "backend: " + m.client.BaseURL + " (" + state + ")"
 }
 
 func (m model) viewLogin() string {
@@ -23,17 +33,9 @@ func (m model) viewLogin() string {
 	}
 	b.WriteString("\n\n")
 
-	if m.signupMode {
-		b.WriteString(m.renderField("Username", m.username.View()))
-		b.WriteString("\n")
-		b.WriteString(m.renderField("Email", m.email.View()))
-		b.WriteString("\n")
-		b.WriteString(m.renderField("Password", m.password.View()))
-	} else {
-		b.WriteString(m.renderField("Identifier", m.identifier.View()))
-		b.WriteString("\n")
-		b.WriteString(m.renderField("Password", m.password.View()))
-	}
+	b.WriteString(m.renderField("Email", m.email.View()))
+	b.WriteString("\n")
+	b.WriteString(m.renderField("Password", m.password.View()))
 
 	b.WriteString("\n\n")
 	if m.loading {
@@ -50,9 +52,9 @@ func (m model) viewLogin() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("enter submit · tab/↑↓ move · ctrl+t toggle sign in/up · q quit"))
+	b.WriteString(helpStyle.Render("enter submit · tab/↑↓ move · ctrl+t toggle sign in/up · ctrl+c quit"))
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("backend: " + m.client.BaseURL))
+	b.WriteString(helpStyle.Render(m.backendIndicator()))
 
 	return b.String()
 }
@@ -64,9 +66,16 @@ func (m model) renderField(label, value string) string {
 func (m model) viewMain() string {
 	var b strings.Builder
 
-	// Header
-	header := titleStyle.Render("traer") + subtitleStyle.Render("  ·  Music → Nextcloud")
-	b.WriteString(header)
+	// Header with the selected process type for new jobs.
+	b.WriteString(titleStyle.Render("traer") + subtitleStyle.Render("  ·  YouTube → media"))
+	b.WriteString("  ")
+	b.WriteString(helpStyle.Render(m.backendIndicator()))
+	b.WriteString("\n\n")
+
+	// Process type row.
+	b.WriteString(labelStyle.Render("Process") +
+		activeTagStyle.Render(m.currentProcessType()) + " " +
+		helpStyle.Render("ctrl+p to cycle"))
 	b.WriteString("\n\n")
 
 	// URL input box.
@@ -76,7 +85,7 @@ func (m model) viewMain() string {
 	}
 	b.WriteString(urlBox.Render(m.urls.View()))
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("ctrl+s queue to Nextcloud · tab switch focus · ctrl+r refresh · q quit"))
+	b.WriteString(helpStyle.Render("ctrl+s queue jobs · ctrl+p process type · tab switch focus · ctrl+r refresh · ctrl+o logout"))
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Only download content you own or are authorized to use."))
 	b.WriteString("\n\n")
@@ -89,15 +98,8 @@ func (m model) viewMain() string {
 		b.WriteString(helpStyle.Render("  No jobs yet. Paste links above and press ctrl+s."))
 		b.WriteString("\n")
 	} else {
-		barWidth := 24
-		if m.width > 0 && m.width-60 > 8 {
-			barWidth = m.width - 60
-			if barWidth > 48 {
-				barWidth = 48
-			}
-		}
 		for i, job := range m.jobs {
-			b.WriteString(m.renderJob(i, job, barWidth))
+			b.WriteString(m.renderJob(i, job))
 			b.WriteString("\n")
 		}
 	}
@@ -119,54 +121,46 @@ func (m model) viewMain() string {
 	return b.String()
 }
 
-func (m model) renderJob(index int, job Job, barWidth int) string {
+func (m model) renderJob(index int, job Job) string {
 	cursor := "  "
 	if m.mainFocus == focusJobs && index == m.jobIndex {
 		cursor = "▸ "
 	}
 
-	name := job.FileName()
-	if name == "" {
-		name = job.URL
-	}
+	name := strings.TrimSpace(job.URL)
 	if name == "" {
 		name = job.ID
 	}
-	// Keep names from wrapping the layout.
-	if len(name) > 44 {
-		name = name[:41] + "…"
-	}
+	name = truncate(name, 56)
 
-	status := statusStyle(job.Status).Render(padRight(job.Status, 9))
+	status := statusStyle(job.Status).Render(padRight(job.Status, 12))
+	kind := helpStyle.Render(padRight(job.ProcessType, 14))
+	line := cursor + status + " " + kind + " " + name
 
-	var line string
-	if job.Status == "done" || job.Status == "failed" {
-		line = cursor + padRight(name, 44) + " " + status
-	} else {
-		line = cursor + padRight(name, 44) + " " + status + " " +
-			progressBar(job.Progress, barWidth) + " " + itoa(int(job.Progress)) + "%"
-	}
-
+	// Secondary line: upload state, retries and creation time. The live API
+	// does not expose per-job progress or error text, so none is shown.
 	var detail string
 	switch {
+	case job.Status == statusFailed:
+		detail = errorStyle.Render("failed after " + itoa(job.Retries) + " retries")
+	case job.Status == statusUploading:
+		detail = warnStyle.Render("uploading…")
 	case job.Uploaded:
-		detail = successStyle.Render("uploaded to Nextcloud")
-	case job.UploadError != "":
-		detail = errorStyle.Render(job.UploadError)
-	case job.Error != "":
-		detail = errorStyle.Render(job.Error)
-	case job.Status == "uploading":
-		detail = warnStyle.Render("uploading to Nextcloud…")
-	case job.FileName() != "":
-		detail = jobSourceStyle.Render(job.FileName())
+		detail = successStyle.Render("uploaded")
+	case job.Status == statusCompleted:
+		detail = successStyle.Render("completed")
 	}
 
+	meta := job.CreatedAt.Format("2006-01-02 15:04")
+	if job.Retries > 0 && job.Status != statusFailed {
+		meta += " · retries " + itoa(job.Retries)
+	}
+	row2 := helpStyle.Render(meta)
 	if detail != "" {
-		line += "\n" + cursor + "  " + detail
+		row2 = detail + "  " + row2
 	}
-	if job.Status == "failed" {
-		line += "\n" + cursor + "  " + helpStyle.Render("press r to retry")
-	}
+	line += "\n" + cursor + "  " + row2
+
 	return line
 }
 
@@ -175,4 +169,18 @@ func padRight(s string, width int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", width-len(s))
+}
+
+func truncate(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	if max == 1 {
+		return "…"
+	}
+	return s[:max-1] + "…"
+}
+
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }
