@@ -2,38 +2,46 @@ package types
 
 import (
 	"sync"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type JobStatus string
 
 const (
+	StatusNotStarted    JobStatus = "not_started"
 	StatusQueued    JobStatus = "queued"
 	StatusRunning   JobStatus = "running"
 	StatusUploading JobStatus = "uploading"
-	StatusDone      JobStatus = "done"
+	StatusUploaded  JobStatus = "uploaded"
+	StatusCompleted JobStatus = "completed"
 	StatusFailed    JobStatus = "failed"
 )
 
-type ContentType string
+type ProcessType string
 
 const (
-	VideoContent ContentType = "video"
-	AudioContent ContentType = "audio"
-	MusicContent ContentType = "music"
+	VideoProcess         ProcessType = "video"
+	AudioProcess         ProcessType = "audio"
+	PlaylistProcess      ProcessType = "playlist"
+	TranscriptionProcess ProcessType = "transcription"
+	UploadProcess        ProcessType = "upload"
 )
 
 type Job struct {
-	ID       string
-	URL      string
-	Status   JobStatus
-	Type     ContentType
-	Progress float64
-	Output   string
-	Error    string
-	// Uploaded is true once the finished file has been successfully stored in
-	// Nextcloud. UploadError captures any WebDAV failure so the UI can offer a
-	// retry without losing the already-downloaded file.
+	ID          uuid.UUID
+	URL         string // single link or a playlist link
+	Status      JobStatus
+	ProcessType ProcessType
+	// Progress    float64
+	TempPath    string
+	Output      string
+	Error       []string
+	Retries     int
 	Uploaded    bool
 	UploadError string
-	MU          sync.Mutex
+	Mutex       sync.Mutex
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }

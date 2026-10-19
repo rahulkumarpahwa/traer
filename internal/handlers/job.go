@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
+
+	// "os"
+	// "path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/rahulkumarpahwa/traer/internal/process"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
 	"github.com/rahulkumarpahwa/traer/internal/types"
@@ -21,10 +23,18 @@ type ServiceHandler struct {
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {
+
+	userId, ok := r.Context().Value("user_id").(string)
+	if !ok {
+		http.Error(w, "User ID not found", http.StatusUnauthorized)
+		return
+	}
+
+	userID := uuid.MustParse(userId)
+
 	type Request struct {
-		URL  string   `json:"url"`
-		URLs []string `json:"urls"` // optional batch of URLs
-		Type string   `json:"type"` // "audio", "video" or "music"
+		URLs        []string `json:"urls"`
+		ProcessType string   `json:"process_type"`
 	}
 
 	var req Request
@@ -38,7 +48,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 	// are collapsed while preserving order.
 	var urls []string
 	seen := map[string]bool{}
-	for _, u := range append([]string{req.URL}, req.URLs...) {
+	for _, u := range urls {
 		u = strings.TrimSpace(u)
 		if u == "" || seen[u] {
 			continue
@@ -52,23 +62,6 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var contentType types.ContentType
-	switch strings.ToLower(req.Type) {
-	case "audio":
-		contentType = types.AudioContent
-	case "video":
-		contentType = types.VideoContent
-	case "music":
-		contentType = types.MusicContent
-		if hs.JW.Uploader == nil || !hs.JW.Uploader.Configured() {
-			utils.ErrorResponse(w, http.StatusServiceUnavailable, fmt.Errorf("nextcloud upload is not configured"))
-			return
-		}
-	default:
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid type"))
-		return
-	}
-
 	for _, u := range urls {
 		if !validators.IsYouTubeURL(u) {
 			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("Invalid URL: %s", u))
@@ -76,154 +69,163 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	created := make([]*types.Job, 0, len(urls))
+	var processType types.ProcessType
+
+	switch req.ProcessType {
+	case "audio":
+		processType = types.AudioProcess
+	case "video":
+		processType = types.VideoProcess
+	case "playlist":
+		processType = types.PlaylistProcess
+	case "upload":
+		processType = types.UploadProcess
+	case "transcription":
+		processType = types.TranscriptionProcess
+	default:
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid process type"))
+		return
+	}
+
 	for _, u := range urls {
-		created = append(created, hs.JW.AddJob(u, contentType))
-	}
-
-	// Return the first created job for backward compatibility with existing
-	// single-URL clients, plus the full list under "jobs" for batch callers.
-	if len(created) == 1 {
-		utils.JSONResponse(w, http.StatusOK, created[0])
-		return
-	}
-
-	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"id":     created[0].ID,
-		"status": created[0].Status,
-		"jobs":   created,
-	})
-}
-
-func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Request) {
-	var activeJobs []*types.Job
-
-	hs.JW.JobsMu.RLock()
-	for _, j := range process.Jobs {
-		j.MU.Lock()
-		if j.Status == types.StatusQueued || j.Status == types.StatusRunning || j.Status == types.StatusUploading {
-			activeJobs = append(activeJobs, j)
+		if err := hs.JW.AddNewJob(u, processType, userID); err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, err)
+			return
 		}
-		j.MU.Unlock()
 	}
-	hs.JW.JobsMu.RUnlock()
 
-	utils.JSONResponse(w, http.StatusOK, activeJobs)
+	utils.JSONResponse(w, http.StatusOK, "process has been created")
 }
 
-func (hs *ServiceHandler) HandleGetInstances(w http.ResponseWriter, r *http.Request) {
-	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"instances": hs.JW.Config.WorkerInstances,
-	})
-}
+// func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Request) {
+// 	var activeJobs []*types.Job
 
-func (hs *ServiceHandler) HandleJobStatus(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
+// 	hs.JW.JobsMu.RLock()
+// 	for _, j := range process.Jobs {
+// 		j.MU.Lock()
+// 		if j.Status == types.StatusQueued || j.Status == types.StatusRunning || j.Status == types.StatusUploading {
+// 			activeJobs = append(activeJobs, j)
+// 		}
+// 		j.MU.Unlock()
+// 	}
+// 	hs.JW.JobsMu.RUnlock()
 
-	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
-		return
-	}
+// 	utils.JSONResponse(w, http.StatusOK, activeJobs)
+// }
 
-	j := hs.JW.GetJob(id)
-	if j == nil {
-		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
-		return
-	}
+// func (hs *ServiceHandler) HandleGetInstances(w http.ResponseWriter, r *http.Request) {
+// 	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
+// 		"instances": hs.JW.Config.WorkerInstances,
+// 	})
+// }
 
-	j.MU.Lock()
-	response := map[string]interface{}{
-		"id":          j.ID,
-		"url":         j.URL,
-		"type":        j.Type,
-		"status":      j.Status,
-		"progress":    j.Progress,
-		"output":      j.Output,
-		"error":       j.Error,
-		"uploaded":    j.Uploaded,
-		"uploadError": j.UploadError,
-	}
-	j.MU.Unlock()
+// func (hs *ServiceHandler) HandleJobStatus(w http.ResponseWriter, r *http.Request) {
+// 	id := r.URL.Query().Get("id")
 
-	utils.JSONResponse(w, http.StatusOK, response)
-}
+// 	if id == "" {
+// 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
+// 		return
+// 	}
 
-// HandleRetryJob re-queues a previously failed job. If the media file is
-// already on disk (download succeeded but the upload failed), the job resumes
-// at the upload step instead of re-downloading.
-func (hs *ServiceHandler) HandleRetryJob(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
-		return
-	}
+// 	j := hs.JW.GetJob(id)
+// 	if j == nil {
+// 		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
+// 		return
+// 	}
 
-	j, err := hs.JW.RetryJob(id)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, err)
-		return
-	}
+// 	j.MU.Lock()
+// 	response := map[string]interface{}{
+// 		"id":          j.ID,
+// 		"url":         j.URL,
+// 		"type":        j.Type,
+// 		"status":      j.Status,
+// 		"progress":    j.Progress,
+// 		"output":      j.Output,
+// 		"error":       j.Error,
+// 		"uploaded":    j.Uploaded,
+// 		"uploadError": j.UploadError,
+// 	}
+// 	j.MU.Unlock()
 
-	utils.JSONResponse(w, http.StatusOK, j)
-}
+// 	utils.JSONResponse(w, http.StatusOK, response)
+// }
 
-func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
+// // HandleRetryJob re-queues a previously failed job. If the media file is
+// // already on disk (download succeeded but the upload failed), the job resumes
+// // at the upload step instead of re-downloading.
+// func (hs *ServiceHandler) HandleRetryJob(w http.ResponseWriter, r *http.Request) {
+// 	id := r.URL.Query().Get("id")
+// 	if id == "" {
+// 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
+// 		return
+// 	}
 
-	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
-		return
-	}
+// 	j, err := hs.JW.RetryJob(id)
+// 	if err != nil {
+// 		utils.ErrorResponse(w, http.StatusBadRequest, err)
+// 		return
+// 	}
 
-	fmt.Printf("[download] Attempting to download job with id: %s\n", id)
+// 	utils.JSONResponse(w, http.StatusOK, j)
+// }
 
-	j := hs.JW.GetJob(id)
-	if j == nil {
-		fmt.Printf("[download] Job not found with id: %s\n", id)
-		hs.JW.JobsMu.RLock()
-		fmt.Printf("[download] Available jobs: %v\n", len(process.Jobs))
-		for jid := range process.Jobs {
-			fmt.Printf("[download]   - %s\n", jid)
-		}
-		hs.JW.JobsMu.RUnlock()
-		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
-		return
-	}
+// func (hs *ServiceHandler) HandleDownload(w http.ResponseWriter, r *http.Request) {
+// 	id := r.URL.Query().Get("id")
 
-	j.MU.Lock()
-	status := j.Status
-	outputPath := j.Output
-	j.MU.Unlock()
+// 	if id == "" {
+// 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("id is required"))
+// 		return
+// 	}
 
-	fmt.Printf("[download] Job found: status=%s, output=%s\n", status, outputPath)
+// 	fmt.Printf("[download] Attempting to download job with id: %s\n", id)
 
-	if status != types.StatusDone {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
-		return
-	}
+// 	j := hs.JW.GetJob(id)
+// 	if j == nil {
+// 		fmt.Printf("[download] Job not found with id: %s\n", id)
+// 		hs.JW.JobsMu.RLock()
+// 		fmt.Printf("[download] Available jobs: %v\n", len(process.Jobs))
+// 		for jid := range process.Jobs {
+// 			fmt.Printf("[download]   - %s\n", jid)
+// 		}
+// 		hs.JW.JobsMu.RUnlock()
+// 		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("job not found"))
+// 		return
+// 	}
 
-	if outputPath == "" {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("output path missing"))
-		return
-	}
+// 	j.MU.Lock()
+// 	status := j.Status
+// 	outputPath := j.Output
+// 	j.MU.Unlock()
 
-	resolvedPath, err := process.ResolveOutputPath(outputPath)
-	if err == nil && resolvedPath != "" {
-		outputPath = resolvedPath
-		j.MU.Lock()
-		j.Output = resolvedPath
-		j.MU.Unlock()
-	}
+// 	fmt.Printf("[download] Job found: status=%s, output=%s\n", status, outputPath)
 
-	if _, err := os.Stat(outputPath); err != nil {
-		fmt.Printf("[download] File stat error: %v\n", err)
-		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("file not found: %v", err))
-		return
-	}
+// 	if status != types.StatusDone {
+// 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("file not ready"))
+// 		return
+// 	}
 
-	// Serve file
-	w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(outputPath))
-	w.Header().Set("Content-Type", "application/octet-stream")
+// 	if outputPath == "" {
+// 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Errorf("output path missing"))
+// 		return
+// 	}
 
-	http.ServeFile(w, r, outputPath)
-}
+// 	resolvedPath, err := process.ResolveOutputPath(outputPath)
+// 	if err == nil && resolvedPath != "" {
+// 		outputPath = resolvedPath
+// 		j.MU.Lock()
+// 		j.Output = resolvedPath
+// 		j.MU.Unlock()
+// 	}
+
+// 	if _, err := os.Stat(outputPath); err != nil {
+// 		fmt.Printf("[download] File stat error: %v\n", err)
+// 		utils.ErrorResponse(w, http.StatusNotFound, fmt.Errorf("file not found: %v", err))
+// 		return
+// 	}
+
+// 	// Serve file
+// 	w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(outputPath))
+// 	w.Header().Set("Content-Type", "application/octet-stream")
+
+// 	http.ServeFile(w, r, outputPath)
+// }

@@ -3,8 +3,11 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/rahulkumarpahwa/traer/internal/tdd"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"github.com/rahulkumarpahwa/traer/internal/validators"
 )
@@ -14,14 +17,35 @@ type ProcessStorage struct {
 }
 
 type ProcessStorageInterface interface {
+	GetProcessByID(id uuid.UUID) (tdd.GetProcess, error)
 	CreateProcess(id uuid.UUID, user_id uuid.UUID, url string, status types.JobStatus, processType types.ProcessType) error
-	// UpdateUserByID(id int, password string) error
+	UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error
 	// DeleteUserByID(id int) error
-	// GetUserByID(id int) (*types.User, error)
-	// GetUserByEmail(email string) (*types.User, error)
 }
 
-func (u *UserStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url string, status types.JobStatus, processType types.ProcessType) error {
+func (p *ProcessStorage) GetProcessByID(id uuid.UUID) (tdd.GetProcess, error) {
+	if id == uuid.Nil {
+		return tdd.GetProcess{}, fmt.Errorf("id should not be invalid")
+	}
+
+	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at FROM process WHERE id = ?`)
+	if err != nil {
+		return tdd.GetProcess{}, fmt.Errorf("failed to prepare select: %v", err)
+	}
+	defer stmt.Close()
+
+	var process tdd.GetProcess
+	err = stmt.QueryRow(id).Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.CreatedAt, &process.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return tdd.GetProcess{}, err // No user found
+	} else if err != nil {
+		return tdd.GetProcess{}, fmt.Errorf("failed to query user: %v", err)
+	}
+
+	return process, nil
+}
+
+func (p *ProcessStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url string, status types.JobStatus, processType types.ProcessType) error {
 	// Validate inputs
 	if id == uuid.Nil || user_id == uuid.Nil {
 		return fmt.Errorf("id and user_id should not be empty")
@@ -34,7 +58,7 @@ func (u *UserStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url string,
 	// put these in valiadtors
 
 	// Prepare the SQL statement
-	stmt, err := u.DB.Prepare(`
+	stmt, err := p.DB.Prepare(`
 		INSERT INTO process (id, user_id, url, status, process_type)
 		VALUES (?, ?, ?, ?, ?)
 	`)
@@ -52,52 +76,55 @@ func (u *UserStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url string,
 	return nil
 }
 
-// func (u *UserStorage) UpdateUserByID(id int, password string) error {
-// 	if id <= 0 {
-// 		return fmt.Errorf("invalid user ID")
-// 	}
+// upgrade this method to update multiple values.
+func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error {
+	if id == uuid.Nil {
+		return fmt.Errorf("process id should not be invalid.")
+	}
 
-// 	// Build query parts dynamically
-// 	setClauses := []string{}
-// 	args := []interface{}{}
+	queryParts := []string{}
+	args := []any{}
 
-// 	// If password is provided, hash it and add to the update
-// 	if password != "" {
-// 		hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-// 		if err != nil {
-// 			return fmt.Errorf("failed to hash password: %v", err)
-// 		}
-// 		setClauses = append(setClauses, "password_hash = ?")
-// 		args = append(args, string(hashedBytes))
-// 	}
+	if status != "" {
+		queryParts = append(queryParts, "status = ?")
+		args = append(args, status)
+	}
 
-// 	// If nothing to update, return error
-// 	if len(setClauses) == 0 {
-// 		return fmt.Errorf("no fields to update")
-// 	}
+	if tempPath != "" {
+		queryParts = append(queryParts, "temp_path = ?")
+		args = append(args, tempPath)
+	}
 
-// 	// Always update the timestamp
-// 	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+	if uploaded {
+		queryParts = append(queryParts, "uploaded = ?")
+		args = append(args, 1)
+	}
 
-// 	// Build final query
-// 	query := fmt.Sprintf("UPDATE users SET %s WHERE id = ?",
-// 		strings.Join(setClauses, ", "))
-// 	args = append(args, id)
+	if !(retries < 1) {
+		queryParts = append(queryParts, "retries = ?")
+		args = append(args, retries)
+	}
 
-// 	// Prepare and execute
-// 	stmt, err := u.DB.Prepare(query)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to prepare update: %v", err)
-// 	}
-// 	defer stmt.Close()
+	// Build final query
+	query := fmt.Sprintf("UPDATE process SET %s updated_at = ? WHERE id = ?", strings.Join(queryParts, ", "))
 
-// 	_, err = stmt.Exec(args...)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to execute update: %v", err)
-// 	}
+	// Prepare and execute
+	stmt, err := p.DB.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare update: %v", err)
+	}
+	defer stmt.Close()
 
-// 	return nil
-// }
+	args = append(args, time.Now())
+	args = append(args, id.String())
+
+	_, err = stmt.Exec(args...)
+	if err != nil {
+		return fmt.Errorf("failed to execute process update: %v", err)
+	}
+
+	return nil
+}
 
 // // DeleteUser removes a user by ID
 // func (u *UserStorage) DeleteUserByID(id int) error {
@@ -117,56 +144,4 @@ func (u *UserStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url string,
 // 	}
 
 // 	return nil
-// }
-
-// // GetUserByID retrieves a user by ID
-// func (u *UserStorage) GetUserByID(id int) (*types.User, error) {
-// 	if id <= 0 {
-// 		return nil, fmt.Errorf("invalid user ID")
-// 	}
-
-// 	stmt, err := u.DB.Prepare(`SELECT id, email, password_hash, created_at, updated_at FROM users WHERE id = ?`)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to prepare select: %v", err)
-// 	}
-// 	defer stmt.Close()
-
-// 	var user types.User
-// 	err = stmt.QueryRow(id).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
-// 	if err == sql.ErrNoRows {
-// 		return nil, nil // No user found
-// 	} else if err != nil {
-// 		return nil, fmt.Errorf("failed to query user: %v", err)
-// 	}
-
-// 	return &user, nil
-// }
-
-// // GetUserByEmail retrieves a user by email
-// func (u *UserStorage) GetUserByEmail(email string) (*types.User, error) {
-// 	if email == "" {
-// 		return nil, fmt.Errorf("email cannot be empty")
-// 	}
-
-// 	stmt, err := u.DB.Prepare(`SELECT id, email, password_hash, created_at, updated_at FROM users WHERE email = ?`)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to prepare select: %v", err)
-// 	}
-// 	defer stmt.Close()
-
-// 	var user types.User
-// 	err = stmt.QueryRow(email).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
-// 	if err == sql.ErrNoRows {
-// 		return nil, nil
-// 	} else if err != nil {
-// 		return nil, fmt.Errorf("failed to query user: %v", err)
-// 	}
-
-// 	return &types.User{
-// 		ID:           user.ID,
-// 		Email:        user.Email,
-// 		PasswordHash: user.PasswordHash,
-// 		CreatedAt:    user.CreatedAt,
-// 		UpdatedAt:    user.UpdatedAt,
-// 	}, nil
 // }

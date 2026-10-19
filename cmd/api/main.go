@@ -28,6 +28,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// creating the download folder
+	if err := os.MkdirAll("downloads", os.ModePerm); err != nil {
+		log.Fatal(err)
+	}
+
 	// setting up the configurations
 	cfg := config.Load()
 
@@ -44,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Setting up the Storage
+	// setting the user storage
 	userStorage := storage.UserStorage{DB: DB}
 
 	// setting up the admin user
@@ -52,6 +57,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// setting up the process storage
+	processStorage := storage.ProcessStorage{DB: DB}
 
 	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline).
 	// Credentials come exclusively from config/env and are never logged.
@@ -67,6 +75,7 @@ func main() {
 
 	// Creating the job worker with resolved executable paths
 	jobworker := process.JobWorker{
+		ProcessStorage:  &processStorage,
 		Config:          cfg,
 		ExecutablePaths: executablePaths,
 		Uploader:        uploader,
@@ -90,11 +99,11 @@ func main() {
 
 	// Job routes - auth required
 	router.Handle("POST /jobs/create", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleCreateJobs)))
-	router.Handle("GET /jobs/active", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleActiveJobs)))
-	router.Handle("GET /jobs/status", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobStatus)))
-	router.Handle("POST /jobs/retry", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleRetryJob)))
-	router.Handle("GET /jobs/download", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleDownload)))
-	router.Handle("GET /instances/get", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleGetInstances)))
+	// router.Handle("GET /jobs/active", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleActiveJobs)))
+	// router.Handle("GET /jobs/status", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobStatus)))
+	// router.Handle("POST /jobs/retry", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleRetryJob)))
+	// router.Handle("GET /jobs/download", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleDownload)))
+	// router.Handle("GET /instances/get", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleGetInstances)))
 
 	// User routes - auth required
 	router.Handle("PUT /users", userHandler.AuthMiddleware(http.HandlerFunc(userHandler.HandleUpdateUser)))
