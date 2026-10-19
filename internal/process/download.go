@@ -51,14 +51,14 @@ func (jw *JobWorker) runDownload(job *types.Job) error {
 	}
 
 	if resolvedPath, err := ResolveOutputPath(job.Output); err == nil && resolvedPath != "" {
-		job.Mutex.Lock()
+		// job.Mutex.Lock()
 		job.Output = resolvedPath
 		job.TempPath = resolvedPath
 		err := jw.ProcessStorage.UpdateProcessByID(job.ID, job.Status, job.TempPath, false, 0)
 		if err != nil {
 			return err
 		}
-		job.Mutex.Unlock()
+		// job.Mutex.Unlock()
 
 	}
 	return nil
@@ -140,10 +140,10 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 
 	// Set the final output path after processing all output
 	if lastPathLine != "" {
-		job.Mutex.Lock()
+		// job.Mutex.Lock()
 		job.Output = lastPathLine
 		fmt.Printf("job Final captured output path: %s\n", lastPathLine)
-		job.Mutex.Unlock()
+		// job.Mutex.Unlock()
 	}
 
 	if err := scanner.Err(); err != nil {

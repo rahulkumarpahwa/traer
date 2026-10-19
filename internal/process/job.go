@@ -62,13 +62,11 @@ func (jw *JobWorker) AddNewJob(url string, processType types.ProcessType, userId
 	case jobQueue <- job:
 		fmt.Printf("new process added in queue of type: %s\n", processType)
 	default:
-		job.Mutex.Lock()
 		job.Status = types.StatusFailed
 		job.Error = append(job.Error, "queue full")
 		if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusFailed, "", false, 0); err != nil {
 			return err
 		}
-		job.Mutex.Unlock()
 	}
 
 	return nil
@@ -80,35 +78,27 @@ func (jw *JobWorker) processDownloadJob(job *types.Job) {
 		return
 	}
 
-	job.Mutex.Lock()
 	job.Status = types.StatusRunning
 	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusRunning, "", false, 0); err != nil {
 		fmt.Println(err)
 		return
 	}
-	job.Mutex.Unlock()
 
 	if err := jw.runDownload(job); err != nil {
-		job.Mutex.Lock()
 		job.Status = types.StatusFailed
 		job.Error = append(job.Error, err.Error())
-		job.Mutex.Unlock()
 		return
 	}
 
-	job.Mutex.Lock()
 	job.Status = types.StatusCompleted
 	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusCompleted, "", false, 0); err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Printf("job [%s] has been completed with process type: %s\n", job.ID.String(), job.ProcessType)
-	job.Mutex.Unlock()
 
 	// adding the job again to upload:
-	job.Mutex.Lock()
 	job.ProcessType = types.UploadProcess
 	jobQueue <- job
 	fmt.Printf("new upload process added in queue of type: %s\n", job.ProcessType)
-	job.Mutex.Unlock()
 }

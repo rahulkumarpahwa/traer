@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/rahulkumarpahwa/traer/config"
 	_ "modernc.org/sqlite"
@@ -18,10 +19,24 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 		return nil, fmt.Errorf("Database Path not found!")
 	}
 
-	DB, err := sql.Open("sqlite", o.Config.DatabasePath)
+	dsn := o.Config.DatabasePath
+	// Ensure every pooled connection gets the same pragmas.
+	// modernc.org/sqlite supports _pragma query params.
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	dsn += sep + "_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)"
+
+	DB, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
+
+	// SQLite has a single writer: serialize access through one connection.
+	// 10 conns + busy_timeout=0 is what produced SQLITE_BUSY on Prepare.
+	DB.SetMaxOpenConns(1)
+	DB.SetMaxIdleConns(1)
 
 	// ping the DB
 	err = DB.Ping()
@@ -29,11 +44,23 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 		return nil, err
 	}
 
-	DB.SetMaxOpenConns(10)
-	DB.SetMaxIdleConns(5)
+	// Belt-and-braces: also set on this connection in case DSN param
+	// is ignored by driver version. Must be separate Execs - the driver
+	// does not reliably run multi-statement strings in one Exec, and
+	// the old code ignored the error return.
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA synchronous=NORMAL",
+	} {
+		if _, err := DB.Exec(pragma); err != nil {
+			return nil, fmt.Errorf("failed to set %q: %w", pragma, err)
+		}
+	}
 
 	// Opening the TABLE
-	stmt, err := DB.Prepare(`CREATE TABLE IF NOT EXISTS users (
+	userStmt, err := DB.Prepare(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,                         
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
@@ -44,13 +71,15 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 		return nil, err
 	}
 
-	_, err = stmt.Exec()
+	_, err = userStmt.Exec()
+	_ = userStmt.Close()
 	if err != nil {
 		return nil, err
 	}
+
 	slog.Info("user table created successfully.")
 
-	stmt, err = DB.Prepare(`CREATE TABLE IF NOT EXISTS process (
+	processStmt, err := DB.Prepare(`CREATE TABLE IF NOT EXISTS process (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
     url TEXT,
@@ -69,16 +98,12 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 		return nil, err
 	}
 
-	_, err = stmt.Exec()
+	_, err = processStmt.Exec()
+	_ = processStmt.Close()
 	if err != nil {
 		return nil, err
 	}
 	slog.Info("process table created successfully.")
-
-	_, err = DB.Exec("PRAGMA foreign_keys = ON")
-	if err != nil {
-		return nil, err
-	}
 
 	return DB, nil
 }

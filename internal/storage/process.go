@@ -35,6 +35,8 @@ func (p *ProcessStorage) GetProcesses() ([]tdd.GetProcess, error) {
 		return nil, err
 	}
 
+	defer rows.Close()
+
 	var processes []tdd.GetProcess
 
 	var process tdd.GetProcess
@@ -45,9 +47,8 @@ func (p *ProcessStorage) GetProcesses() ([]tdd.GetProcess, error) {
 		}
 		processes = append(processes, process)
 	}
-
-	if err == sql.ErrNoRows {
-		return nil, err // No user found
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return processes, nil

@@ -9,7 +9,7 @@
 
 # temp files
 /downloads/
-/database/*.db
+/database/
 
 # OS / editor noise
 *.exe

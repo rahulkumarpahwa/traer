@@ -21,6 +21,7 @@ func InitiateDatabase() error {
 		return nil
 
 	}
+	_ = file.Close()
 	fmt.Println("database.db already exists")
 	return nil
 }
