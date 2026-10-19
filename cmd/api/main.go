@@ -99,7 +99,7 @@ func main() {
 
 	// Job routes - auth required
 	router.Handle("POST /jobs/create", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleCreateJobs)))
-	// router.Handle("GET /jobs/active", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleActiveJobs)))
+	router.Handle("GET /jobs", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobs)))
 	// router.Handle("GET /jobs/status", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleJobStatus)))
 	// router.Handle("POST /jobs/retry", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleRetryJob)))
 	// router.Handle("GET /jobs/download", userHandler.AuthMiddleware(http.HandlerFunc(serviceHandler.HandleDownload)))

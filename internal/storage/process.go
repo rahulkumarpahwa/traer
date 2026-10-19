@@ -20,7 +20,37 @@ type ProcessStorageInterface interface {
 	GetProcessByID(id uuid.UUID) (tdd.GetProcess, error)
 	CreateProcess(id uuid.UUID, user_id uuid.UUID, url string, status types.JobStatus, processType types.ProcessType) error
 	UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error
-	// DeleteUserByID(id int) error
+	GetProcesses() ([]tdd.GetProcess, error)
+}
+
+func (p *ProcessStorage) GetProcesses() ([]tdd.GetProcess, error) {
+	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at FROM process`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare select: %v", err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.Query()
+	if err != nil {
+		return nil, err
+	}
+
+	var processes []tdd.GetProcess
+
+	var process tdd.GetProcess
+	for rows.Next() {
+		err := rows.Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.CreatedAt, &process.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		processes = append(processes, process)
+	}
+
+	if err == sql.ErrNoRows {
+		return nil, err // No user found
+	}
+
+	return processes, nil
 }
 
 func (p *ProcessStorage) GetProcessByID(id uuid.UUID) (tdd.GetProcess, error) {
@@ -125,23 +155,3 @@ func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus,
 
 	return nil
 }
-
-// // DeleteUser removes a user by ID
-// func (u *UserStorage) DeleteUserByID(id int) error {
-// 	if id <= 0 {
-// 		return fmt.Errorf("invalid user ID")
-// 	}
-
-// 	stmt, err := u.DB.Prepare(`DELETE FROM users WHERE id = ?`)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to prepare delete: %v", err)
-// 	}
-// 	defer stmt.Close()
-
-// 	_, err = stmt.Exec(id)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to execute delete: %v", err)
-// 	}
-
-// 	return nil
-// }

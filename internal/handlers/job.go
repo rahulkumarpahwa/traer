@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rahulkumarpahwa/traer/internal/process"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
+	"github.com/rahulkumarpahwa/traer/internal/tdd"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"github.com/rahulkumarpahwa/traer/internal/utils"
 	"github.com/rahulkumarpahwa/traer/internal/validators"
@@ -97,21 +98,17 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 	utils.JSONResponse(w, http.StatusOK, "process has been created")
 }
 
-// func (hs *ServiceHandler) HandleActiveJobs(w http.ResponseWriter, r *http.Request) {
-// 	var activeJobs []*types.Job
+func (hs *ServiceHandler) HandleJobs(w http.ResponseWriter, r *http.Request) {
+	var jobs []tdd.GetProcess
 
-// 	hs.JW.JobsMu.RLock()
-// 	for _, j := range process.Jobs {
-// 		j.MU.Lock()
-// 		if j.Status == types.StatusQueued || j.Status == types.StatusRunning || j.Status == types.StatusUploading {
-// 			activeJobs = append(activeJobs, j)
-// 		}
-// 		j.MU.Unlock()
-// 	}
-// 	hs.JW.JobsMu.RUnlock()
+	jobs, err := hs.JW.ProcessStorage.GetProcesses()
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
 
-// 	utils.JSONResponse(w, http.StatusOK, activeJobs)
-// }
+	utils.JSONResponse(w, http.StatusOK, jobs)
+}
 
 // func (hs *ServiceHandler) HandleGetInstances(w http.ResponseWriter, r *http.Request) {
 // 	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
