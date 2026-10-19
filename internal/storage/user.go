@@ -4,9 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	// "github.com/google/uuid"
-	// "github.com/rahulkumarpahwa/traer/internal/tdd"
 	"github.com/google/uuid"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"golang.org/x/crypto/bcrypt"
