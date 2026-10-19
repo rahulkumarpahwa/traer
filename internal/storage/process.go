@@ -58,14 +58,14 @@ func (p *ProcessStorage) GetProcessByID(id uuid.UUID) (tdd.GetProcess, error) {
 		return tdd.GetProcess{}, fmt.Errorf("id should not be invalid")
 	}
 
-	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at FROM process WHERE id = ?`)
+	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, temp_path, created_at, updated_at FROM process WHERE id = ?`)
 	if err != nil {
 		return tdd.GetProcess{}, fmt.Errorf("failed to prepare select: %v", err)
 	}
 	defer stmt.Close()
 
 	var process tdd.GetProcess
-	err = stmt.QueryRow(id).Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.CreatedAt, &process.UpdatedAt)
+	err = stmt.QueryRow(id).Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.TempPath, &process.CreatedAt, &process.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return tdd.GetProcess{}, err // No user found
 	} else if err != nil {

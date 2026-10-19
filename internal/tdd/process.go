@@ -15,6 +15,7 @@ type GetProcess struct {
 	Processtype types.ProcessType `json:"process_type"`
 	Retries     int               `json:"retries"`
 	Uploaded    bool              `json:"uploaded"`
+	TempPath    string            `json:"temp_path"`
 	CreatedAt   time.Time         `json:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at"`
 }

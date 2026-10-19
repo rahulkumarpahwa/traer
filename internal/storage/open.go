@@ -29,6 +29,9 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 		return nil, err
 	}
 
+	DB.SetMaxOpenConns(10)
+	DB.SetMaxIdleConns(5)
+
 	// Opening the TABLE
 	stmt, err := DB.Prepare(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,                         
