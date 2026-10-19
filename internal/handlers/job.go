@@ -49,7 +49,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 	// are collapsed while preserving order.
 	var urls []string
 	seen := map[string]bool{}
-	for _, u := range urls {
+	for _, u := range req.URLs {
 		u = strings.TrimSpace(u)
 		if u == "" || seen[u] {
 			continue
@@ -59,13 +59,13 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 	}
 
 	if len(urls) == 0 {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("url is required"))
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("url is required\n"))
 		return
 	}
 
 	for _, u := range urls {
 		if !validators.IsYouTubeURL(u) {
-			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("Invalid URL: %s", u))
+			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("Invalid URL: %s\n", u))
 			return
 		}
 	}
@@ -84,7 +84,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 	case "transcription":
 		processType = types.TranscriptionProcess
 	default:
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid process type"))
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid process type\n"))
 		return
 	}
 
@@ -95,7 +95,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	utils.JSONResponse(w, http.StatusOK, "process has been created")
+	utils.JSONResponse(w, http.StatusOK, "process has been created\n")
 }
 
 func (hs *ServiceHandler) HandleJobs(w http.ResponseWriter, r *http.Request) {

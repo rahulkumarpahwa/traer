@@ -26,15 +26,15 @@ var jobQueue = make(chan *types.Job, 10)
 func (jw *JobWorker) StartWorkers() {
 	jw.startOnce.Do(func() {
 		for i := 0; i < jw.Config.WorkerInstances; i++ {
-			jw.JobsWG.Add(1)
+			// jw.JobsWG.Add(1)
 			go jw.worker()
 		}
 	})
-	jw.JobsWG.Wait()
+	// jw.JobsWG.Wait()
 }
 
 func (jw *JobWorker) worker() {
-	defer jw.JobsWG.Done()
+	// defer jw.JobsWG.Done()
 	for job := range jobQueue {
 		if job.ProcessType == types.UploadProcess {
 			jw.processUploadJob(job)
@@ -60,7 +60,7 @@ func (jw *JobWorker) AddNewJob(url string, processType types.ProcessType, userId
 	// selection in case queue fulls
 	select {
 	case jobQueue <- job:
-		fmt.Printf("new process added in queue of type: %s", processType)
+		fmt.Printf("new process added in queue of type: %s\n", processType)
 	default:
 		job.Mutex.Lock()
 		job.Status = types.StatusFailed
@@ -102,22 +102,13 @@ func (jw *JobWorker) processDownloadJob(job *types.Job) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("job [%s] has been completed with process type: %s", job.ID.String(), job.ProcessType)
+	fmt.Printf("job [%s] has been completed with process type: %s\n", job.ID.String(), job.ProcessType)
 	job.Mutex.Unlock()
 
-	// // adding the job again to upload: selection in case queue fulls
-	// select {
-	// case jobQueue <- job:
-	// 	fmt.Printf("new upload process added in queue of type: %s", job.ProcessType)
-	// default:
-	// 	job.Mutex.Lock()
-	// 	job.Status = types.StatusFailed
-	// 	job.Error = append(job.Error, "queue full")
-	// 	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusFailed, "", false, 0); err != nil {
-	// 		fmt.Printf("updating the process failed: %v with err: %v", job.ID, err)
-	// 		return
-	// 	}
-	// 	job.Mutex.Unlock()
-	// }
-
+	// adding the job again to upload:
+	job.Mutex.Lock()
+	job.ProcessType = types.UploadProcess
+	jobQueue <- job
+	fmt.Printf("new upload process added in queue of type: %s\n", job.ProcessType)
+	job.Mutex.Unlock()
 }

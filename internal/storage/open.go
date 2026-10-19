@@ -54,8 +54,8 @@ func (o *OpenDB) Open() (*sql.DB, error) {
     status TEXT NOT NULL DEFAULT 'not_started'
     CHECK (status IN ('not_started', 'queued', 'running', 'uploading', 'uploaded', 'completed', 'failed')),
     process_type TEXT DEFAULT NULL
-    CHECK (job_type IN ('audio', 'video', 'transcription', 'playlist', 'upload') OR job_type IS NULL),
-	uploaded INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+    CHECK (process_type IN ('audio', 'video', 'transcription', 'playlist', 'upload') OR process_type IS NULL),
+	uploaded INTEGER NOT NULL DEFAULT 0 CHECK (uploaded IN (0, 1)),
 	retries INT DEFAULT 0,
 	temp_path TEXT DEFAULT NULL,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

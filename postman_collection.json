@@ -1,14 +1,14 @@
 {
   "info": {
-    "_postman_id": "traer-backend-collection-clean",
+    "_postman_id": "traer-backend-collection-clean-v2",
     "name": "Traer Backend API",
-    "description": "Clean Postman collection for the Traer backend. Includes all endpoints identified in the source code.\n\nAuth: The backend uses an HttpOnly `token` cookie issued by POST /login. Every authenticated request must send that cookie (Postman's cookie jar auto-persists it). Set the collection variable `baseUrl` to your server address.\n\nOrder: Register User -> Login -> [authenticated] -> Create Job -> Get Job Status / Download / Retry / List Active / Get Worker Instances / User operations.",
+    "description": "Postman collection synced with source code (cmd/api/main.go + internal/handlers/*.go).\n\nLIVE ROUTES (10): GET / | POST /login | POST /users | POST /logout | POST /jobs/create (auth) | GET /jobs (auth) | PUT /users?id= (auth) | DELETE /users?id= (auth) | GET /users/id?id= (auth) | GET /users/email?email= (auth).\n\nDISABLED (commented out in cmd/api/main.go:103-106, handlers commented in internal/handlers/job.go:113,119,153,169): GET /jobs/status | POST /jobs/retry | GET /jobs/download | GET /instances/get — kept in place with [DISABLED in code] suffix and will return 404 until uncommented.\n\nAuth: backend issues HttpOnly `token` cookie on POST /login (24h expiry). AuthMiddleware (internal/handlers/auth.go) reads `token` cookie, validates JWT, injects user_id+email into context. Authenticated requests must send that cookie (Postman cookie jar auto-persists it). POST /logout clears the cookie (requires cookie to exist, else 401).\n\nOrder: Register User -> Login -> [authenticated] Create Job -> List All Jobs -> User operations.\n\nKNOWN CODE BUG (internal/handlers/job.go:50-52): HandleCreateJobs decodes {urls, process_type} into req but then builds `var urls []string` and ranges over the empty local instead of req.URLs, so it ALWAYS returns 400 \"url is required\" until fixed (change to `for _, u := range req.URLs`). Collection body below shows the intended schema.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8082",
+      "value": "http://localhost:8080",
       "type": "string",
       "description": "Base URL of the Traer API; do not add a trailing slash."
     },
@@ -16,7 +16,7 @@
       "key": "jobId",
       "value": "",
       "type": "string",
-      "description": "Automatically populated after a successful Create Job response."
+      "description": "Job ID for the disabled endpoints (GET /jobs/status, POST /jobs/retry, GET /jobs/download use ?id=). No live endpoint returns a job ID yet."
     },
     {
       "key": "userId",
@@ -28,13 +28,7 @@
       "key": "userEmail",
       "value": "test@example.com",
       "type": "string",
-      "description": "Email used by lookup and registration requests."
-    },
-    {
-      "key": "username",
-      "value": "testuser",
-      "type": "string",
-      "description": "Username used by registration requests."
+      "description": "Email used by register/login/lookup requests."
     }
   ],
   "item": [
@@ -105,7 +99,7 @@
                 "users"
               ]
             },
-            "description": "Public registration. Body: email and password are required; username is optional.",
+            "description": "Public registration (POST /users, no auth). Handler: HandleCreateUser. Requires {email, password} per CreateUserRequest; extra `username` field is IGNORED by code. Returns 201 {\"message\":\"User Signup successfully\"}; 409 if email exists; 400 if email/password empty.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"ChangeMe123!\"\n}",
@@ -141,7 +135,7 @@
                 "login"
               ]
             },
-            "description": "Public login. Returns HTTP 200 and sets an HttpOnly `token` cookie in the response. Backend checks `req.Password` and `req.Email` (reads email, not username).",
+            "description": "Public login (POST /login, no auth). Handler: HandleLogin. Body {email, password} per LoginRequest — `username` is NOT read by code (only req.Email). Returns 200 {\"message\":\"login successful\",\"user_id\":\"<uuid>\"} + HttpOnly `token` cookie (24h). Cookie jar auto-saves it for auth requests. 401 = invalid credentials.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"ChangeMe123!\"\n}",
@@ -173,7 +167,7 @@
                 "logout"
               ]
             },
-            "description": "Public logout endpoint. Send after login; session/cookie behavior depends on the handler implementation."
+            "description": "POST /logout — PUBLIC in main.go (no AuthMiddleware) but requires existing `token` cookie: 401 {\"error\":\"not authenticated\"} if missing; else 200 {\"message\":\"logout successful\"} and clears cookie. Send with cookie jar after login."
           },
           "response": []
         }
@@ -210,7 +204,7 @@
                 }
               ]
             },
-            "description": "Authenticated. Query parameter name `id` is inferred from the route name; confirm HandleGetUserByID for the exact parameter name."
+            "description": "AUTH (token cookie). GET /users/id?id= — confirmed in HandleGetUserByID (r.URL.Query().Get(id), strconv.Atoi, must be >0; 400 invalid user ID otherwise). NOTE: DB stores UUID strings so numeric lookup fails for real users. 200 returns full user row incl. password_hash; 404 user not found."
           },
           "response": []
         },
@@ -241,38 +235,7 @@
                 }
               ]
             },
-            "description": "Authenticated. Query parameter name `email` is inferred from the route name; confirm HandleGetUserByEmail for the exact parameter name."
-          },
-          "response": []
-        },
-        {
-          "name": "Get User by Username",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/username?username={{username}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "users",
-                "username"
-              ],
-              "query": [
-                {
-                  "key": "username",
-                  "value": "{{username}}",
-                  "description": "Username to look up."
-                }
-              ]
-            },
-            "description": "Authenticated. Query parameter name `username` is inferred from the route name; confirm HandleGetUserByUsername for the exact parameter name."
+            "description": "AUTH (token cookie). GET /users/email?email= — confirmed in HandleGetUserByEmail (r.URL.Query().Get(email); 400 email is required if empty). 200 returns full user row; 404 user not found."
           },
           "response": []
         },
@@ -291,7 +254,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/users",
+              "raw": "{{baseUrl}}/users?id={{userId}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -306,10 +269,10 @@
                 }
               ]
             },
-            "description": "Authenticated user update endpoint. Example body is a template only; confirm required fields and whether the handler expects an ID in the body in HandleUpdateUser.",
+            "description": "AUTH (token cookie). PUT /users?id= — confirmed in HandleUpdateUser (?id= via strconv.Atoi, must be >0; 400 invalid user ID). Body is UpdateUserRequest but ONLY password is persisted; username ignored. Success returns User updated successfully.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"{{userId}}\",\n  \"username\": \"updateduser\",\n  \"email\": \"updated@example.com\",\n  \"password\": \"NewChangeMe123!\"\n}",
+              "raw": "{\n  \"password\": \"NewChangeMe123!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -345,7 +308,7 @@
                 }
               ]
             },
-            "description": "Authenticated user deletion endpoint. Query parameter `id` is a best-effort assumption; confirm whether HandleDeleteUser expects an ID in the query string or JSON body."
+            "description": "AUTH (token cookie). DELETE /users?id= — confirmed in HandleDeleteUser (?id= via strconv.Atoi, must be >0; 400 invalid user ID). No body. Success returns User deleted successfully."
           },
           "response": []
         }
@@ -370,7 +333,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"https://www.youtube.com/watch?v=REPLACE_WITH_VIDEO_ID\",\n  \"type\": \"audio\"\n}",
+              "raw": "{\n  \"urls\": [\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"],\n  \"process_type\": \"audio\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -387,7 +350,7 @@
                 "create"
               ]
             },
-            "description": "Creates an asynchronous media-processing job. Replace the sample URL with a real, accessible video URL before sending. Supported types listed in the supplied collection are audio and video."
+            "description": "AUTH (token cookie). POST /jobs/create, handler HandleCreateJobs. Body is {urls, process_type} where process_type is audio|video|playlist|upload|transcription and urls are YouTube URLs. Returns 200 JSON string. KNOWN BUG: job.go loops empty local urls, always 400 url is required until fixed."
           },
           "event": [
             {
@@ -399,26 +362,17 @@
                   "  pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
                   "});",
                   "if (pm.response.code >= 200 && pm.response.code < 300) {",
-                  "  let data;",
-                  "  try { data = pm.response.json(); } catch (e) { data = null; }",
-                  "  pm.test('Create job response includes id, status, and progress', function () {",
-                  "    pm.expect(data, 'JSON response body').to.be.an('object');",
-                  "    pm.expect(data).to.have.property('id').that.is.a('string').and.not.empty;",
-                  "    pm.expect(data).to.have.property('status');",
-                  "    pm.expect(data).to.have.property('progress');",
+                  "  pm.test('Create job response body is present', function () {",
+                  "    pm.expect(pm.response.text()).to.be.a('string').and.not.empty;",
                   "  });",
-                  "  if (data && typeof data.id === 'string' && data.id.length > 0) {",
-                  "    pm.collectionVariables.set('jobId', data.id);",
-                  "    console.log('Saved jobId:', data.id);",
-                  "  }",
-                  "}"
+                  "} // NOTE: no jobId is returned by this endpoint; disabled endpoints use manual {{jobId}}."
                 ]
               }
             }
           ]
         },
         {
-          "name": "List Active Jobs",
+          "name": "List ALL jobs",
           "request": {
             "method": "GET",
             "header": [
@@ -428,16 +382,15 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/jobs/active",
+              "raw": "{{baseUrl}}/jobs",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "jobs",
-                "active"
+                "jobs"
               ]
             },
-            "description": "Lists jobs that are queued or running, according to the supplied collection."
+            "description": "AUTH (token cookie). LIVE route GET /jobs, handler HandleJobs. Returns 200 array of GetProcess rows {id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at}."
           },
           "event": [
             {
@@ -445,7 +398,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Active jobs endpoint responds successfully', function () {",
+                  "pm.test('List jobs endpoint responds successfully', function () {",
                   "  pm.expect(pm.response.code).to.be.within(200, 299);",
                   "});",
                   "if (pm.response.code >= 200 && pm.response.code < 300) {",
@@ -459,7 +412,7 @@
           ]
         },
         {
-          "name": "Get Job Status",
+          "name": "Get Job Status [DISABLED in code]",
           "request": {
             "method": "GET",
             "header": [
@@ -485,7 +438,7 @@
                 }
               ]
             },
-            "description": "Gets the status and progress of the job identified by jobId. Create a job first."
+            "description": "DISABLED: route commented out in cmd/api/main.go:103 and handler commented in job.go:119. Returns 404 until uncommented. Intended: AUTH GET /jobs/status?id=, 400 if id missing, 404 job not found."
           },
           "event": [
             {
@@ -507,7 +460,7 @@
           ]
         },
         {
-          "name": "Download Completed File",
+          "name": "Download Completed File [DISABLED in code]",
           "request": {
             "method": "GET",
             "header": [],
@@ -528,7 +481,7 @@
                 }
               ]
             },
-            "description": "Downloads the output for a completed job. The response is expected to be a file stream, not JSON."
+            "description": "DISABLED - route commented out, returns 404. Intended file stream."
           },
           "event": [
             {
@@ -545,7 +498,7 @@
           ]
         },
         {
-          "name": "Retry Job",
+          "name": "Retry Job [DISABLED in code]",
           "request": {
             "method": "POST",
             "header": [
@@ -571,17 +524,17 @@
                 }
               ]
             },
-            "description": "Authenticated. Retry a failed or retryable job. Body schema is not shown in main.go, so this request is left without a body until HandleRetryJob is checked."
+            "description": "DISABLED - route commented out in main.go, returns 404. Intended AUTH POST /jobs/retry?id=."
           },
           "response": []
         }
       ]
     },
     {
-      "name": "System Info",
+      "name": "System Info [DISABLED route]",
       "item": [
         {
-          "name": "Get Worker Instances",
+          "name": "Get Worker Instances [DISABLED in code]",
           "request": {
             "method": "GET",
             "header": [
@@ -600,7 +553,7 @@
                 "get"
               ]
             },
-            "description": "Returns the current worker instance count. The supplied collection suggests the response contains a numeric instances field."
+            "description": "DISABLED - route commented out in main.go, returns 404. Intended AUTH GET /instances/get returns {instances: number}."
           },
           "event": [
             {

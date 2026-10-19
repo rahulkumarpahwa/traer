@@ -109,48 +109,63 @@ func (p *ProcessStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url stri
 // upgrade this method to update multiple values.
 func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error {
 	if id == uuid.Nil {
-		return fmt.Errorf("process id should not be invalid.")
+		return fmt.Errorf("process id should not be invalid.\n")
+	}
+
+	if status == "" && tempPath == "" && !uploaded && retries < 1 {
+		fmt.Println("nothing to update")
+		return nil
 	}
 
 	queryParts := []string{}
 	args := []any{}
 
 	if status != "" {
-		queryParts = append(queryParts, "status = ?")
+		queryParts = append(queryParts, "status = ?,")
 		args = append(args, status)
 	}
 
 	if tempPath != "" {
-		queryParts = append(queryParts, "temp_path = ?")
+		queryParts = append(queryParts, "temp_path = ?,")
 		args = append(args, tempPath)
 	}
 
 	if uploaded {
-		queryParts = append(queryParts, "uploaded = ?")
+		queryParts = append(queryParts, "uploaded = ?,")
 		args = append(args, 1)
 	}
 
 	if !(retries < 1) {
-		queryParts = append(queryParts, "retries = ?")
+		queryParts = append(queryParts, "retries = ?,")
 		args = append(args, retries)
 	}
 
-	// Build final query
-	query := fmt.Sprintf("UPDATE process SET %s updated_at = ? WHERE id = ?", strings.Join(queryParts, ", "))
-
-	// Prepare and execute
-	stmt, err := p.DB.Prepare(query)
-	if err != nil {
-		return fmt.Errorf("failed to prepare update: %v", err)
+	if retries < 0 {
+		return fmt.Errorf("retries cannot be negative\n")
 	}
-	defer stmt.Close()
+
+	if len(queryParts) == 0 {
+		return nil
+	}
+
+	// Build final query
+	query := fmt.Sprintf("UPDATE process SET %s updated_at = ? WHERE id = ?", strings.Join(queryParts, " "))
 
 	args = append(args, time.Now())
 	args = append(args, id.String())
 
-	_, err = stmt.Exec(args...)
+	result, err := p.DB.Exec(query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to execute process update: %v", err)
+		return fmt.Errorf("failed to execute process update: %w\n", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w\n", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("process not found: %s\n", id)
 	}
 
 	return nil
