@@ -2,6 +2,7 @@ package process
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -17,8 +18,6 @@ type JobWorker struct {
 	Config          *config.Config
 	ExecutablePaths map[string]string
 	Uploader        *nextcloud.Client
-	JobsMu          sync.RWMutex
-	JobsWG          sync.WaitGroup
 }
 
 var jobQueue = make(chan *types.Job, 10)
@@ -26,15 +25,12 @@ var jobQueue = make(chan *types.Job, 10)
 func (jw *JobWorker) StartWorkers() {
 	jw.startOnce.Do(func() {
 		for i := 0; i < jw.Config.WorkerInstances; i++ {
-			// jw.JobsWG.Add(1)
 			go jw.worker()
 		}
 	})
-	// jw.JobsWG.Wait()
 }
 
 func (jw *JobWorker) worker() {
-	// defer jw.JobsWG.Done()
 	for job := range jobQueue {
 		if job.ProcessType == types.UploadProcess {
 			jw.processUploadJob(job)
@@ -95,7 +91,7 @@ func (jw *JobWorker) processDownloadJob(job *types.Job) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("job [%s] has been completed with process type: %s\n", job.ID.String(), job.ProcessType)
+	slog.Info("job has been completed", "job_id", job.ID.String(), "process_type", job.ProcessType)
 
 	// adding the job again to upload:
 	job.ProcessType = types.UploadProcess
