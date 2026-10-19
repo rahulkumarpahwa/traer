@@ -3,7 +3,7 @@ build:
 run: build
 	@./bin/api
 tui:
-	@go run ./cmd/tui/main.go
+	@go run ./cmd/tui
 continue:
 	@air
 migrate-up:

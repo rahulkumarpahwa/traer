@@ -108,25 +108,36 @@ func (c *Client) doJSON(method, path string, body interface{}, out interface{}) 
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("cannot reach Traer API at %s: %w; start it with `go run ./cmd/api` or set -backend to the running API URL", c.BaseURL, err)
 	}
 	defer resp.Body.Close()
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, fmt.Errorf("read backend response: %w", err)
+	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		var payload map[string]interface{}
 		message := fmt.Sprintf("backend request failed with status %d", resp.StatusCode)
-		if decodeErr := json.NewDecoder(resp.Body).Decode(&payload); decodeErr == nil {
-			if m, ok := payload["error"].(string); ok && m != "" {
-				message = m
-			} else if m, ok := payload["message"].(string); ok && m != "" {
-				message = m
+		var payload map[string]interface{}
+		if json.Unmarshal(bodyBytes, &payload) == nil {
+			if m, ok := payload["error"].(string); ok && strings.TrimSpace(m) != "" {
+				message = strings.TrimSpace(m)
+			} else if m, ok := payload["message"].(string); ok && strings.TrimSpace(m) != "" {
+				message = strings.TrimSpace(m)
+			}
+		} else if strings.TrimSpace(string(bodyBytes)) != "" {
+			var jsonMessage string
+			if json.Unmarshal(bodyBytes, &jsonMessage) == nil && strings.TrimSpace(jsonMessage) != "" {
+				message = strings.TrimSpace(jsonMessage)
+			} else {
+				message = strings.TrimSpace(string(bodyBytes))
 			}
 		}
 		return resp.StatusCode, fmt.Errorf("%s", message)
 	}
 
-	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if out != nil && len(bytes.TrimSpace(bodyBytes)) > 0 {
+		if err := json.Unmarshal(bodyBytes, out); err != nil {
 			return resp.StatusCode, err
 		}
 	}
