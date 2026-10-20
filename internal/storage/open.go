@@ -12,6 +12,7 @@ import (
 
 type OpenDB struct {
 	Config *config.Config
+	Logger *slog.Logger
 }
 
 func (o *OpenDB) Open() (*sql.DB, error) {
@@ -103,7 +104,7 @@ func (o *OpenDB) Open() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("process table created successfully.")
+	o.Logger.Info("process table created successfully.")
 
 	return DB, nil
 }

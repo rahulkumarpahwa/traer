@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,7 +14,8 @@ import (
 )
 
 type ProcessStorage struct {
-	DB *sql.DB
+	DB     *sql.DB
+	Logger *slog.Logger
 }
 
 type ProcessStorageInterface interface {
@@ -114,7 +116,7 @@ func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus,
 	}
 
 	if status == "" && tempPath == "" && !uploaded && retries < 1 {
-		fmt.Println("nothing to update")
+		slog.Error("nothing to update")
 		return nil
 	}
 

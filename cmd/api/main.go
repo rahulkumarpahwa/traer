@@ -17,6 +17,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
 	"github.com/rahulkumarpahwa/traer/internal/process"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
+	"github.com/rahulkumarpahwa/traer/internal/utils"
 )
 
 func main() {
@@ -42,15 +43,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Logger:
+	Logger := utils.NewSlogger(os.Stdout)
+
 	// Opening the database:
-	openDB := storage.OpenDB{Config: cfg}
+	openDB := storage.OpenDB{Config: cfg, Logger: Logger}
 	DB, err := openDB.Open()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// setting the user storage
-	userStorage := storage.UserStorage{DB: DB}
+	userStorage := storage.UserStorage{DB: DB, Logger : Logger}
 
 	// setting up the admin user
 	err = userStorage.CreateAdminUser(context.Background(), cfg)
@@ -59,7 +63,7 @@ func main() {
 	}
 
 	// setting up the process storage
-	processStorage := storage.ProcessStorage{DB: DB}
+	processStorage := storage.ProcessStorage{DB: DB, Logger : Logger}
 
 	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline).
 	// Credentials come exclusively from config/env and are never logged.

@@ -3,14 +3,17 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
+
 	"github.com/google/uuid"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type UserStorage struct {
-	DB *sql.DB
+	DB     *sql.DB
+	Logger *slog.Logger
 }
 
 type UserStorageInterface interface {
@@ -44,11 +47,13 @@ func (u *UserStorage) CreateUser(email, password string) error {
 	defer stmt.Close() // Always close prepared statements
 
 	// Execute the prepared statement
-	_, err = stmt.Exec(uuid.New(), email, string(hashedPassword))
+	id := uuid.New()
+	_, err = stmt.Exec(id, email, string(hashedPassword))
 	if err != nil {
 		return fmt.Errorf("failed to execute statement: %v", err)
 	}
 
+	u.Logger.Info("user has been created", "id", id)
 	return nil
 }
 
