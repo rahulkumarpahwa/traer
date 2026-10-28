@@ -44,21 +44,19 @@ func (jw *JobWorker) runDownload(job *types.Job) error {
 		parseOutput(stderr, job)
 	}()
 
-	waitErr := cmd.Wait()
 	outputWg.Wait()
+	waitErr := cmd.Wait()
 	if waitErr != nil {
 		return waitErr
 	}
 
 	if resolvedPath, err := ResolveOutputPath(job.Output); err == nil && resolvedPath != "" {
-		// job.Mutex.Lock()
 		job.Output = resolvedPath
 		job.TempPath = resolvedPath
 		err := jw.ProcessStorage.UpdateProcessByID(job.ID, job.Status, job.TempPath, false, 0)
 		if err != nil {
 			return err
 		}
-		// job.Mutex.Unlock()
 
 	}
 	return nil
@@ -86,17 +84,17 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 
 	if job.ProcessType == types.AudioProcess {
 		args := append([]string{
-			"-f", "bestaudio",
-			"-x",
-			"--audio-format", "mp3",
-			"--ffmpeg-location", ffmpegLocation,
+			"-f", "ba[ext=m4a]",
+			"--embed-metadata",
 			"--embed-thumbnail",
-			"--add-metadata",
 		}, baseArgs...)
 
 		args = append(args, job.URL)
 		return exec.Command(ytDlpPath, args...)
 	}
+
+	// mp3 version
+	// if job.ProcessType == types.AudioProcess { args := append([]string{ "-f", "bestaudio", "-x", "--audio-format", "mp3", "--ffmpeg-location", ffmpegLocation, "--embed-thumbnail", "--add-metadata", }, baseArgs...) args = append(args, job.URL) return exec.Command(ytDlpPath, args...) }
 
 	if job.ProcessType == types.VideoProcess {
 		args := append([]string{
