@@ -84,13 +84,18 @@ func (o *OpenDB) Open() (*sql.DB, error) {
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
     url TEXT,
+	content_type TEXT NOT NULL DEFAULT 'audio' 
+    CHECK (status IN ('audio', 'video')),
     status TEXT NOT NULL DEFAULT 'not_started'
-    CHECK (status IN ('not_started', 'queued', 'running', 'uploading', 'uploaded', 'completed', 'failed')),
+    CHECK (status IN ('not_started', 'download_queued', 'download_running', 'download_completed', 'download_failed', 'upload_queued', 'upload_running', 'upload_completed', 'upload_failed')),
     process_type TEXT DEFAULT NULL
-    CHECK (process_type IN ('audio', 'video', 'transcription', 'playlist', 'upload') OR process_type IS NULL),
-	uploaded INTEGER NOT NULL DEFAULT 0 CHECK (uploaded IN (0, 1)),
+    CHECK (process_type IN ('download', 'upload', 'upload') OR process_type IS NULL),
+	audio_quality TEXT DEFAULT NULL
+    CHECK (audio_quality IN ('mp3', 'm4a') OR audio_quality IS NULL),
+	video_quality TEXT DEFAULT NULL
+    CHECK (video_quality IN ('360p', '480p', '720p', '1080p', '1440p', '2160p') OR video_quality IS NULL),
 	retries INT DEFAULT 0,
-	temp_path TEXT DEFAULT NULL,
+	output_path TEXT DEFAULT NULL,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`)

@@ -5,15 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	// "os"
-	// "path/filepath"
-	"strings"
-
-	"github.com/google/uuid"
+	"github.com/rahulkumarpahwa/traer/internal/auth"
+	"github.com/rahulkumarpahwa/traer/internal/dto"
 	"github.com/rahulkumarpahwa/traer/internal/process"
 	"github.com/rahulkumarpahwa/traer/internal/service"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
-	"github.com/rahulkumarpahwa/traer/internal/tdd"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"github.com/rahulkumarpahwa/traer/internal/utils"
 	"github.com/rahulkumarpahwa/traer/internal/validators"
@@ -26,68 +22,87 @@ type ServiceHandler struct {
 }
 
 func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Request) {
+	var createJobReq dto.CreateJobRequest
 
-	userId, ok := r.Context().Value("user_id").(string)
-	if !ok {
-		http.Error(w, "User ID not found", http.StatusUnauthorized)
+	userID, err := auth.GetUserId(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	userID := uuid.MustParse(userId)
-
-	type Request struct {
-		URLs        []string `json:"urls"`
-		ProcessType string   `json:"process_type"`
-	}
-
-	var req Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&createJobReq); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, err)
 		return
 	}
 
-	// Normalize to a list of URLs, accepting either a single "url" or a batch
-	// in "urls". Blank entries are dropped and duplicates within the request
-	// are collapsed while preserving order.
-	var urls []string
-	seen := map[string]bool{}
-	for _, u := range req.URLs {
-		u = strings.TrimSpace(u)
-		if u == "" || seen[u] {
-			continue
-		}
-		seen[u] = true
-		urls = append(urls, u)
-	}
-
-	if len(urls) == 0 {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("url is required\n"))
+	urls, err := validators.FilterAndValidateUrls(createJobReq.URLs)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, err)
 		return
 	}
 
-	for _, u := range urls {
-		if !validators.IsYouTubeURL(u) {
-			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("Invalid URL: %s\n", u))
-			return
-		}
+	var contentType types.ContentType
+
+	switch createJobReq.ContentType {
+	case "audio":
+		contentType = types.ContentAudio
+	case "video":
+		contentType = types.ContentVideo
+	default:
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid content_type\n"))
+		return
 	}
 
 	var processType types.ProcessType
 
-	switch req.ProcessType {
-	case "audio":
-		processType = types.AudioProcess
-	case "video":
-		processType = types.VideoProcess
-	case "playlist":
-		processType = types.PlaylistProcess
+	switch createJobReq.ProcessType {
+	case "download":
+		processType = types.ProcessDownload
 	case "upload":
-		processType = types.UploadProcess
-	case "transcription":
-		processType = types.TranscriptionProcess
+		processType = types.ProcessUpload
 	default:
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid process type\n"))
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid process_type\n"))
 		return
+	}
+
+	var audioQuality types.AudioQuality
+	if createJobReq.AudioQuality != "" {
+		switch createJobReq.AudioQuality {
+		case "mp3":
+			audioQuality = types.AudioMp3
+		case "m4a":
+			audioQuality = types.AudioM4A
+
+		default:
+			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Errorf("invalid audio_quality\n"))
+			return
+		}
+	}
+
+	var videoQuality types.VideoQuality
+	if createJobReq.VideoQuality != "" {
+
+		switch createJobReq.VideoQuality {
+		case "360p":
+			videoQuality = types.Video360p
+		case "480p":
+			videoQuality = types.Video480p
+		case "720p":
+			videoQuality = types.Video720p
+		case "1080p":
+			videoQuality = types.Video1080p
+		case "1440p":
+			videoQuality = types.Video1440p
+		case "2160p":
+			videoQuality = types.Video2160p
+		default:
+			utils.ErrorResponse(
+				w,
+				http.StatusBadRequest,
+				fmt.Errorf("invalid video_quality"),
+			)
+			return
+		}
 	}
 
 	for _, u := range urls {
@@ -105,14 +120,14 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 			}
 
 			for _, entry := range playlist.Entries {
-				if err := hs.JW.AddNewJob(entry.Url, processType, userID); err != nil {
+				if err := hs.JW.AddNewJob(entry.Url, contentType, audioQuality, videoQuality, processType, userID); err != nil {
 					utils.ErrorResponse(w, http.StatusBadRequest, err)
 					return
 				}
 			}
 
 		} else {
-			if err := hs.JW.AddNewJob(u, processType, userID); err != nil {
+			if err := hs.JW.AddNewJob(u, contentType, audioQuality, videoQuality, processType, userID); err != nil {
 				utils.ErrorResponse(w, http.StatusBadRequest, err)
 				return
 			}
@@ -124,7 +139,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 }
 
 func (hs *ServiceHandler) HandleJobs(w http.ResponseWriter, r *http.Request) {
-	var jobs []tdd.GetProcess
+	var jobs []dto.GetProcess
 
 	jobs, err := hs.JW.ProcessStorage.GetProcesses()
 	if err != nil {

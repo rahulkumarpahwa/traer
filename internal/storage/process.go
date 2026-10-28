@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rahulkumarpahwa/traer/internal/tdd"
+	"github.com/rahulkumarpahwa/traer/internal/dto"
 	"github.com/rahulkumarpahwa/traer/internal/types"
 	"github.com/rahulkumarpahwa/traer/internal/validators"
 )
@@ -19,13 +19,13 @@ type ProcessStorage struct {
 }
 
 type ProcessStorageInterface interface {
-	GetProcessByID(id uuid.UUID) (tdd.GetProcess, error)
+	GetProcessByID(id uuid.UUID) (dto.GetProcess, error)
 	CreateProcess(id uuid.UUID, user_id uuid.UUID, url string, status types.JobStatus, processType types.ProcessType) error
 	UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error
-	GetProcesses() ([]tdd.GetProcess, error)
+	GetProcesses() ([]dto.GetProcess, error)
 }
 
-func (p *ProcessStorage) GetProcesses() ([]tdd.GetProcess, error) {
+func (p *ProcessStorage) GetProcesses() ([]dto.GetProcess, error) {
 	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at FROM process`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare select: %v", err)
@@ -39,9 +39,9 @@ func (p *ProcessStorage) GetProcesses() ([]tdd.GetProcess, error) {
 
 	defer rows.Close()
 
-	var processes []tdd.GetProcess
+	var processes []dto.GetProcess
 
-	var process tdd.GetProcess
+	var process dto.GetProcess
 	for rows.Next() {
 		err := rows.Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.CreatedAt, &process.UpdatedAt)
 		if err != nil {
@@ -56,23 +56,23 @@ func (p *ProcessStorage) GetProcesses() ([]tdd.GetProcess, error) {
 	return processes, nil
 }
 
-func (p *ProcessStorage) GetProcessByID(id uuid.UUID) (tdd.GetProcess, error) {
+func (p *ProcessStorage) GetProcessByID(id uuid.UUID) (dto.GetProcess, error) {
 	if id == uuid.Nil {
-		return tdd.GetProcess{}, fmt.Errorf("id should not be invalid")
+		return dto.GetProcess{}, fmt.Errorf("id should not be invalid")
 	}
 
 	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, temp_path, created_at, updated_at FROM process WHERE id = ?`)
 	if err != nil {
-		return tdd.GetProcess{}, fmt.Errorf("failed to prepare select: %v", err)
+		return dto.GetProcess{}, fmt.Errorf("failed to prepare select: %v", err)
 	}
 	defer stmt.Close()
 
-	var process tdd.GetProcess
+	var process dto.GetProcess
 	err = stmt.QueryRow(id).Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.TempPath, &process.CreatedAt, &process.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return tdd.GetProcess{}, err // No user found
+		return dto.GetProcess{}, err // No user found
 	} else if err != nil {
-		return tdd.GetProcess{}, fmt.Errorf("failed to query user: %v", err)
+		return dto.GetProcess{}, fmt.Errorf("failed to query user: %v", err)
 	}
 
 	return process, nil

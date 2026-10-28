@@ -18,6 +18,7 @@ type JobWorker struct {
 	Config          *config.Config
 	ExecutablePaths map[string]string
 	Uploader        *nextcloud.Client
+	Logger          *slog.Logger
 }
 
 var jobQueue = make(chan *types.Job, 10)
@@ -32,36 +33,55 @@ func (jw *JobWorker) StartWorkers() {
 
 func (jw *JobWorker) worker() {
 	for job := range jobQueue {
-		if job.ProcessType == types.UploadProcess {
+		if job.ProcessType == types.ProcessUpload {
 			jw.processUploadJob(job)
-		} else {
+		} else if job.ProcessType == types.ProcessDownload {
 			jw.processDownloadJob(job)
 		}
 	}
 }
 
 // adds the job to the channel
-func (jw *JobWorker) AddNewJob(url string, processType types.ProcessType, userId uuid.UUID) error {
-	job := &types.Job{
-		ID:          uuid.New(),
-		URL:         url,
-		Status:      types.StatusQueued,
-		ProcessType: processType,
+func (jw *JobWorker) AddNewJob(url string, contentType types.ContentType, audioQuality types.AudioQuality, videoQuality types.VideoQuality, processType types.ProcessType, userID uuid.UUID) error {
+
+	var status types.JobStatus
+	if processType == types.ProcessDownload {
+		status = types.StatusDownloadQueued
+	} else if processType == types.ProcessUpload {
+		status = types.StatusUploadQueued
 	}
 
-	if err := jw.ProcessStorage.CreateProcess(job.ID, userId, job.URL, job.Status, job.ProcessType); err != nil {
+	job := &types.Job{
+		ID:           uuid.New(),
+		URL:          url,
+		ContentType:  contentType,
+		Status:       status,
+		ProcessType:  processType,
+		AudioQuality: audioQuality,
+		VideoQuality: videoQuality,
+	}
+
+	if err := jw.ProcessStorage.CreateProcess(job.ID, userID, job.URL, job.Status, job.ProcessType); err != nil {
 		return err
 	}
 
 	// selection in case queue fulls
 	select {
 	case jobQueue <- job:
-		fmt.Printf("new process added in queue of type: %s\n", processType)
+		jw.Logger.Info("new job added ", "id", job.ID)
 	default:
-		job.Status = types.StatusFailed
-		job.Error = append(job.Error, "queue full")
-		if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusFailed, "", false, 0); err != nil {
-			return err
+		job.Error = "queue full"
+		if processType == types.ProcessDownload {
+			job.Status = types.StatusDownloadFailed
+			if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadFailed, "", false, 0); err != nil {
+				return err
+			}
+		} else if processType == types.ProcessUpload {
+			job.Status = types.StatusUploadFailed
+			job.Status = types.StatusDownloadFailed
+			if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadFailed, "", false, 0); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -70,31 +90,36 @@ func (jw *JobWorker) AddNewJob(url string, processType types.ProcessType, userId
 
 // downloads the process job temporarily
 func (jw *JobWorker) processDownloadJob(job *types.Job) {
-	if job.ProcessType == types.UploadProcess {
+	if job.ProcessType == types.ProcessUpload {
 		return
 	}
 
-	job.Status = types.StatusRunning
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusRunning, "", false, 0); err != nil {
+	job.Status = types.StatusDownloadRunning
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadRunning, "", false, 0); err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	if err := jw.runDownload(job); err != nil {
-		job.Status = types.StatusFailed
-		job.Error = append(job.Error, err.Error())
+		job.Status = types.StatusDownloadFailed
+		job.Error = err.Error()
 		return
 	}
 
-	job.Status = types.StatusCompleted
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusCompleted, "", false, 0); err != nil {
+	job.Status = types.StatusDownloadCompleted
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadCompleted, "", false, 0); err != nil {
 		fmt.Println(err)
 		return
 	}
 	slog.Info("job has been completed", "job_id", job.ID.String(), "process_type", job.ProcessType)
 
 	// adding the job again to upload:
-	job.ProcessType = types.UploadProcess
+	job.ProcessType = types.ProcessUpload
+	job.Status = types.StatusUploadQueued
 	jobQueue <- job
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadQueued, "", false, 0); err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
 	fmt.Printf("new upload process added in queue of type: %s\n", job.ProcessType)
 }

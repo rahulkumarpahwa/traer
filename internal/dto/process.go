@@ -1,4 +1,4 @@
-package tdd
+package dto
 
 import (
 	"time"

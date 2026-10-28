@@ -12,7 +12,7 @@ import (
 
 // finalizeJob performs post-download work. For music jobs it uploads the MP3 to Nextcloud and only deletes the temporary file after a successful upload. For audio/video jobs it is a no-op (existing behavior is preserved).
 func (jw *JobWorker) processUploadJob(job *types.Job) {
-	if job.ProcessType != types.UploadProcess {
+	if job.ProcessType != types.ProcessUpload {
 		return
 	}
 
@@ -21,9 +21,9 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 		return
 	}
 
-	output := job.Output
-	job.Status = types.StatusUploading
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploading, "", false, 0); err != nil {
+	output := job.OutputPath
+	job.Status = types.StatusUploadRunning
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadRunning, "", false, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
@@ -42,7 +42,7 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 	defer cancel()
 
 	if err := jw.Uploader.UploadFile(ctx, output, jw.Config.NextcloudBasePath, fileName); err != nil {
-		job.UploadError = err.Error()
+		job.Error = err.Error()
 
 		fmt.Printf("upload failed: %w", err)
 		return
@@ -50,9 +50,8 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 
 	// Mark uploaded and delete the temporary file ONLY after a successful
 	// upload. If deletion fails we still consider the job successful because the file safely lives in Nextcloud.
-	job.Uploaded = true
-	job.UploadError = ""
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploaded, "", true, 0); err != nil {
+	job.Error = ""
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadCompleted, "", true, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}

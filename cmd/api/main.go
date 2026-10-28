@@ -84,6 +84,7 @@ func main() {
 		Config:          cfg,
 		ExecutablePaths: executablePaths,
 		Uploader:        uploader,
+		Logger:          Logger,
 	}
 
 	// starting the worker
@@ -94,7 +95,7 @@ func main() {
 	}
 
 	// Creating the new Service Hanlder
-	serviceHandler := handlers.ServiceHandler{JW: &jobworker, PL : &playlistWorker}
+	serviceHandler := handlers.ServiceHandler{JW: &jobworker, PL: &playlistWorker}
 	// Creating the new user Handler
 	userHandler := handlers.UserHandler{UserStorage: &userStorage, Config: cfg}
 

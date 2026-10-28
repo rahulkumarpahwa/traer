@@ -7,3 +7,4 @@ var ytRegex = regexp.MustCompile(`^(https?://)?(www\.|music\.)?(youtube\.com|you
 func IsYouTubeURL(url string) bool {
 	return ytRegex.MatchString(url)
 }
+

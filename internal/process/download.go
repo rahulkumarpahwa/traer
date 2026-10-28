@@ -50,10 +50,9 @@ func (jw *JobWorker) runDownload(job *types.Job) error {
 		return waitErr
 	}
 
-	if resolvedPath, err := ResolveOutputPath(job.Output); err == nil && resolvedPath != "" {
-		job.Output = resolvedPath
-		job.TempPath = resolvedPath
-		err := jw.ProcessStorage.UpdateProcessByID(job.ID, job.Status, job.TempPath, false, 0)
+	if resolvedPath, err := ResolveOutputPath(job.OutputPath); err == nil && resolvedPath != "" {
+		job.OutputPath = resolvedPath
+		err := jw.ProcessStorage.UpdateProcessByID(job.ID, job.Status, job.OutputPath, false, 0)
 		if err != nil {
 			return err
 		}
@@ -82,25 +81,30 @@ func (jw *JobWorker) buildCommand(job *types.Job) *exec.Cmd {
 
 	ffmpegLocation := filepath.Dir(ffmpegPath)
 
-	if job.ProcessType == types.AudioProcess {
-		args := append([]string{
-			"-f", "ba[ext=m4a]",
-			"--embed-metadata",
-			"--embed-thumbnail",
-		}, baseArgs...)
+	if job.ContentType == types.ContentAudio {
+		if job.AudioQuality == types.AudioM4A {
 
-		args = append(args, job.URL)
-		return exec.Command(ytDlpPath, args...)
+			args := append([]string{
+				"-f", "ba[ext=m4a]",
+				"--embed-metadata",
+				"--embed-thumbnail",
+			}, baseArgs...)
+
+			args = append(args, job.URL)
+			return exec.Command(ytDlpPath, args...)
+		} else if job.AudioQuality == types.AudioMp3 {
+			args := append([]string{"-f", "bestaudio", "-x", "--audio-format", "mp3", "--ffmpeg-location", ffmpegLocation, "--embed-thumbnail", "--add-metadata"}, baseArgs...)
+			args = append(args, job.URL)
+			return exec.Command(ytDlpPath, args...)
+		}
+
 	}
 
-	// mp3 version
-	// if job.ProcessType == types.AudioProcess { args := append([]string{ "-f", "bestaudio", "-x", "--audio-format", "mp3", "--ffmpeg-location", ffmpegLocation, "--embed-thumbnail", "--add-metadata", }, baseArgs...) args = append(args, job.URL) return exec.Command(ytDlpPath, args...) }
-
-	if job.ProcessType == types.VideoProcess {
+	if job.ContentType == types.ContentVideo {
 		args := append([]string{
 			"-f", "bv*+ba/best",
-			"--merge-output-format", "mp4",
-			"--remux-video", "mp4",
+			"--merge-output-format", string(job.VideoQuality),
+			"--remux-video", string(job.VideoQuality),
 			"--ffmpeg-location", ffmpegLocation,
 			"--embed-thumbnail",
 			"--add-metadata",
@@ -138,7 +142,7 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 
 	// Set the final output path after processing all output
 	if lastPathLine != "" {
-		job.Output = lastPathLine
+		job.OutputPath = lastPathLine
 		fmt.Printf("job Final captured output path: %s\n", lastPathLine)
 		// job.Mutex.Unlock()
 	}
