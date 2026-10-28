@@ -20,7 +20,7 @@ type JobWorker struct {
 	Uploader        *nextcloud.Client
 }
 
-var jobQueue = make(chan *types.Job, 10)
+var jobQueue = make(chan *types.Job, 200)
 
 func (jw *JobWorker) StartWorkers() {
 	jw.startOnce.Do(func() {
@@ -32,9 +32,9 @@ func (jw *JobWorker) StartWorkers() {
 
 func (jw *JobWorker) worker() {
 	for job := range jobQueue {
-		if job.ProcessType == types.UploadProcess {
-			jw.processUploadJob(job)
-		} else {
+		if job.ProcessType != types.UploadProcess {
+		// 	jw.processUploadJob(job)
+		// } else {
 			jw.processDownloadJob(job)
 		}
 	}

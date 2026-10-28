@@ -21,14 +21,12 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 		return
 	}
 
-	job.Mutex.Lock()
 	output := job.Output
 	job.Status = types.StatusUploading
 	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploading, "", false, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
-	job.Mutex.Unlock()
 
 	if output == "" {
 		fmt.Printf("no output file to upload")
@@ -44,9 +42,7 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 	defer cancel()
 
 	if err := jw.Uploader.UploadFile(ctx, output, jw.Config.NextcloudBasePath, fileName); err != nil {
-		job.Mutex.Lock()
 		job.UploadError = err.Error()
-		job.Mutex.Unlock()
 
 		fmt.Printf("upload failed: %w", err)
 		return
@@ -54,14 +50,12 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 
 	// Mark uploaded and delete the temporary file ONLY after a successful
 	// upload. If deletion fails we still consider the job successful because the file safely lives in Nextcloud.
-	job.Mutex.Lock()
 	job.Uploaded = true
 	job.UploadError = ""
 	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploaded, "", true, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
-	job.Mutex.Unlock()
 
 	if err := os.Remove(output); err != nil {
 		fmt.Printf("[job] uploaded %s but failed to delete temp file %s: %v\n", fileName, output, err)

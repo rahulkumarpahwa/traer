@@ -140,7 +140,6 @@ func parseOutput(pipe io.ReadCloser, job *types.Job) {
 
 	// Set the final output path after processing all output
 	if lastPathLine != "" {
-		// job.Mutex.Lock()
 		job.Output = lastPathLine
 		fmt.Printf("job Final captured output path: %s\n", lastPathLine)
 		// job.Mutex.Unlock()

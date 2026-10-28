@@ -16,6 +16,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/internal/handlers"
 	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
 	"github.com/rahulkumarpahwa/traer/internal/process"
+	"github.com/rahulkumarpahwa/traer/internal/service"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
 	"github.com/rahulkumarpahwa/traer/internal/utils"
 )
@@ -54,7 +55,7 @@ func main() {
 	}
 
 	// setting the user storage
-	userStorage := storage.UserStorage{DB: DB, Logger : Logger}
+	userStorage := storage.UserStorage{DB: DB, Logger: Logger}
 
 	// setting up the admin user
 	err = userStorage.CreateAdminUser(context.Background(), cfg)
@@ -63,7 +64,7 @@ func main() {
 	}
 
 	// setting up the process storage
-	processStorage := storage.ProcessStorage{DB: DB, Logger : Logger}
+	processStorage := storage.ProcessStorage{DB: DB, Logger: Logger}
 
 	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline).
 	// Credentials come exclusively from config/env and are never logged.
@@ -88,8 +89,12 @@ func main() {
 	// starting the worker
 	jobworker.StartWorkers()
 
+	playlistWorker := service.PlaylistWorker{
+		ExecutablePaths: executablePaths,
+	}
+
 	// Creating the new Service Hanlder
-	serviceHandler := handlers.ServiceHandler{JW: &jobworker}
+	serviceHandler := handlers.ServiceHandler{JW: &jobworker, PL : &playlistWorker}
 	// Creating the new user Handler
 	userHandler := handlers.UserHandler{UserStorage: &userStorage, Config: cfg}
 

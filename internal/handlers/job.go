@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rahulkumarpahwa/traer/internal/process"
+	"github.com/rahulkumarpahwa/traer/internal/service"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
 	"github.com/rahulkumarpahwa/traer/internal/tdd"
 	"github.com/rahulkumarpahwa/traer/internal/types"
@@ -20,6 +21,7 @@ import (
 
 type ServiceHandler struct {
 	JW          *process.JobWorker
+	PL          *service.PlaylistWorker
 	UserStorage storage.UserStorageInterface
 }
 
@@ -89,10 +91,33 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 	}
 
 	for _, u := range urls {
-		if err := hs.JW.AddNewJob(u, processType, userID); err != nil {
-			utils.ErrorResponse(w, http.StatusBadRequest, err)
-			return
+
+		ok, _ := validators.IsYouTubePlaylist(u)
+
+		if ok {
+			playlist := &types.Playlist{
+				PlaylistUrl: u,
+				ProcessType: processType,
+			}
+			if err := hs.PL.RunPlayList(playlist); err != nil {
+				utils.ErrorResponse(w, http.StatusBadGateway, err)
+				return
+			}
+
+			for _, entry := range playlist.Entries {
+				if err := hs.JW.AddNewJob(entry.Url, processType, userID); err != nil {
+					utils.ErrorResponse(w, http.StatusBadRequest, err)
+					return
+				}
+			}
+
+		} else {
+			if err := hs.JW.AddNewJob(u, processType, userID); err != nil {
+				utils.ErrorResponse(w, http.StatusBadRequest, err)
+				return
+			}
 		}
+
 	}
 
 	utils.JSONResponse(w, http.StatusOK, "process has been created\n")
