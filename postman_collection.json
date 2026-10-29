@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "traer-backend-collection-clean-v2",
+    "_postman_id": "traer-backend-collection-v3",
     "name": "Traer Backend API",
-    "description": "Postman collection synced with source code (cmd/api/main.go + internal/handlers/*.go).\n\nLIVE ROUTES (10): GET / | POST /login | POST /users | POST /logout | POST /jobs/create (auth) | GET /jobs (auth) | PUT /users?id= (auth) | DELETE /users?id= (auth) | GET /users/id?id= (auth) | GET /users/email?email= (auth).\n\nDISABLED (commented out in cmd/api/main.go:103-106, handlers commented in internal/handlers/job.go:113,119,153,169): GET /jobs/status | POST /jobs/retry | GET /jobs/download | GET /instances/get — kept in place with [DISABLED in code] suffix and will return 404 until uncommented.\n\nAuth: backend issues HttpOnly `token` cookie on POST /login (24h expiry). AuthMiddleware (internal/handlers/auth.go) reads `token` cookie, validates JWT, injects user_id+email into context. Authenticated requests must send that cookie (Postman cookie jar auto-persists it). POST /logout clears the cookie (requires cookie to exist, else 401).\n\nOrder: Register User -> Login -> [authenticated] Create Job -> List All Jobs -> User operations.\n\nKNOWN CODE BUG (internal/handlers/job.go:50-52): HandleCreateJobs decodes {urls, process_type} into req but then builds `var urls []string` and ranges over the empty local instead of req.URLs, so it ALWAYS returns 400 \"url is required\" until fixed (change to `for _, u := range req.URLs`). Collection body below shows the intended schema.",
+    "description": "Postman collection synced with cmd/api/main.go and internal handlers.\n\nLIVE ROUTES (10): GET / | POST /login | POST /users | POST /logout | POST /jobs/create (auth) | GET /jobs (auth) | PUT /users?id= (auth) | DELETE /users?id= (auth) | GET /users/id?id= (auth) | GET /users/email?email= (auth).\n\nJob creation: POST /jobs/create accepts {urls, content_type, process_type, audio_quality?, video_quality?}. content_type is audio or video; process_type is download or upload. For audio, audio_quality may be mp3 or m4a. For video, video_quality may be 360p, 480p, 720p, 1080p, 1440p, or 2160p. URLs must be valid YouTube URLs; playlist URLs are expanded into individual jobs.\n\nAuth: POST /login sets an HttpOnly `token` cookie for 24 hours. Postman persists it and sends it with authenticated requests. POST /logout clears it.\n\nOrder: Register User -> Login -> Create Job -> List All Jobs -> User operations.\n\nThe disabled job-status, retry, download, and worker-instance endpoints remain in this collection as reference requests and return 404 until their routes are registered.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -16,7 +16,7 @@
       "key": "jobId",
       "value": "",
       "type": "string",
-      "description": "Job ID for the disabled endpoints (GET /jobs/status, POST /jobs/retry, GET /jobs/download use ?id=). No live endpoint returns a job ID yet."
+      "description": "Job ID used only by the disabled reference requests. POST /jobs/create does not return job IDs."
     },
     {
       "key": "userId",
@@ -333,7 +333,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"urls\": [\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"],\n  \"process_type\": \"audio\"\n}",
+              "raw": "{\n  \"urls\": [\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"],\n  \"content_type\": \"audio\",\n  \"process_type\": \"download\",\n  \"audio_quality\": \"mp3\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -350,7 +350,7 @@
                 "create"
               ]
             },
-            "description": "AUTH (token cookie). POST /jobs/create, handler HandleCreateJobs. Body is {urls, process_type} where process_type is audio|video|playlist|upload|transcription and urls are YouTube URLs. Returns 200 JSON string. KNOWN BUG: job.go loops empty local urls, always 400 url is required until fixed."
+            "description": "AUTH (token cookie). POST /jobs/create accepts {urls, content_type, process_type, audio_quality?, video_quality?}. urls contains one or more YouTube URLs and playlist URLs are expanded into individual jobs. content_type is audio or video. process_type is download or upload. For audio, audio_quality is optional and must be mp3 or m4a when supplied. For video, video_quality is optional and must be one of 360p, 480p, 720p, 1080p, 1440p, or 2160p when supplied. Returns 200 with a JSON string."
           },
           "event": [
             {
@@ -365,7 +365,7 @@
                   "  pm.test('Create job response body is present', function () {",
                   "    pm.expect(pm.response.text()).to.be.a('string').and.not.empty;",
                   "  });",
-                  "} // NOTE: no jobId is returned by this endpoint; disabled endpoints use manual {{jobId}}."
+                  "} // This endpoint does not return job IDs."
                 ]
               }
             }
@@ -390,7 +390,7 @@
                 "jobs"
               ]
             },
-            "description": "AUTH (token cookie). LIVE route GET /jobs, handler HandleJobs. Returns 200 array of GetProcess rows {id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at}."
+            "description": "AUTH (token cookie). GET /jobs returns a 200 array of process rows: {id, user_id, url, status, process_type, retries, uploaded, temp_path, created_at, updated_at}. Status is one of not_started, download_queued, download_running, download_completed, download_failed, upload_queued, upload_running, upload_completed, or upload_failed."
           },
           "event": [
             {
