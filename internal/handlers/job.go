@@ -105,6 +105,8 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	count := 0
+
 	for _, u := range urls {
 
 		ok, _ := validators.IsYouTubePlaylist(u)
@@ -119,6 +121,8 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 				return
 			}
 
+			utils.UpdateWorkerQueueSize(len(playlist.Entries))
+
 			for _, entry := range playlist.Entries {
 				if err := hs.JW.AddNewJob(entry.Url, contentType, audioQuality, videoQuality, processType, userID); err != nil {
 					utils.ErrorResponse(w, http.StatusBadRequest, err)
@@ -127,6 +131,7 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 			}
 
 		} else {
+			count++
 			if err := hs.JW.AddNewJob(u, contentType, audioQuality, videoQuality, processType, userID); err != nil {
 				utils.ErrorResponse(w, http.StatusBadRequest, err)
 				return
@@ -134,6 +139,8 @@ func (hs *ServiceHandler) HandleCreateJobs(w http.ResponseWriter, r *http.Reques
 		}
 
 	}
+
+	utils.AddWorkerQueueSize(count)
 
 	utils.JSONResponse(w, http.StatusOK, "process has been created\n")
 }

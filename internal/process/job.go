@@ -10,6 +10,7 @@ import (
 	"github.com/rahulkumarpahwa/traer/internal/nextcloud"
 	"github.com/rahulkumarpahwa/traer/internal/storage"
 	"github.com/rahulkumarpahwa/traer/internal/types"
+	"github.com/rahulkumarpahwa/traer/internal/utils"
 )
 
 type JobWorker struct {
@@ -21,7 +22,7 @@ type JobWorker struct {
 	Logger          *slog.Logger
 }
 
-var jobQueue = make(chan *types.Job, 10)
+var jobQueue = make(chan *types.Job, utils.GetWorkerQueueSize())
 
 func (jw *JobWorker) StartWorkers() {
 	jw.startOnce.Do(func() {

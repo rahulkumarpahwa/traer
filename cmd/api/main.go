@@ -66,8 +66,7 @@ func main() {
 	// setting up the process storage
 	processStorage := storage.ProcessStorage{DB: DB, Logger: Logger}
 
-	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline).
-	// Credentials come exclusively from config/env and are never logged.
+	// Setting up the Nextcloud WebDAV uploader (used by the music pipeline). Credentials come exclusively from config/env and are never logged.
 	var uploader *nextcloud.Client
 	if cfg.NextcloudConfigured() {
 		uploader = nextcloud.NewClient(cfg.NextcloudURL, cfg.NextcloudUsername, cfg.NextcloudAppPassword)
