@@ -85,7 +85,7 @@ func (o *OpenDB) Open() (*sql.DB, error) {
     user_id TEXT NOT NULL REFERENCES users(id),
     url TEXT,
 	content_type TEXT NOT NULL DEFAULT 'audio' 
-    CHECK (status IN ('audio', 'video')),
+    CHECK (content_type IN ('audio', 'video')),
     status TEXT NOT NULL DEFAULT 'not_started'
     CHECK (status IN ('not_started', 'download_queued', 'download_running', 'download_completed', 'download_failed', 'upload_queued', 'upload_running', 'upload_completed', 'upload_failed')),
     process_type TEXT DEFAULT NULL
