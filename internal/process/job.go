@@ -74,13 +74,13 @@ func (jw *JobWorker) AddNewJob(url string, contentType types.ContentType, audioQ
 		job.Error = "queue full"
 		if processType == types.ProcessDownload {
 			job.Status = types.StatusDownloadFailed
-			if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadFailed, "", false, 0); err != nil {
+			if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadFailed, 0); err != nil {
 				return err
 			}
 		} else if processType == types.ProcessUpload {
 			job.Status = types.StatusUploadFailed
 			job.Status = types.StatusDownloadFailed
-			if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadFailed, "", false, 0); err != nil {
+			if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadFailed, 0); err != nil {
 				return err
 			}
 		}
@@ -96,7 +96,7 @@ func (jw *JobWorker) processDownloadJob(job *types.Job) {
 	}
 
 	job.Status = types.StatusDownloadRunning
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadRunning, "", false, 0); err != nil {
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadRunning, 0); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -108,7 +108,7 @@ func (jw *JobWorker) processDownloadJob(job *types.Job) {
 	}
 
 	job.Status = types.StatusDownloadCompleted
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadCompleted, "", false, 0); err != nil {
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusDownloadCompleted, 0); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -118,7 +118,7 @@ func (jw *JobWorker) processDownloadJob(job *types.Job) {
 	job.ProcessType = types.ProcessUpload
 	job.Status = types.StatusUploadQueued
 	jobQueue <- job
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadQueued, "", false, 0); err != nil {
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadQueued, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}

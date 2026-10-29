@@ -52,7 +52,7 @@ func (jw *JobWorker) runDownload(job *types.Job) error {
 
 	if resolvedPath, err := ResolveOutputPath(job.OutputPath); err == nil && resolvedPath != "" {
 		job.OutputPath = resolvedPath
-		err := jw.ProcessStorage.UpdateProcessByID(job.ID, job.Status, job.OutputPath, false, 0)
+		err := jw.ProcessStorage.UpdateProcessByID(job.ID, job.Status, 0)
 		if err != nil {
 			return err
 		}

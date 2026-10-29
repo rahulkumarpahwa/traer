@@ -23,7 +23,7 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 
 	output := job.OutputPath
 	job.Status = types.StatusUploadRunning
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadRunning, "", false, 0); err != nil {
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadRunning, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}
@@ -51,7 +51,7 @@ func (jw *JobWorker) processUploadJob(job *types.Job) {
 	// Mark uploaded and delete the temporary file ONLY after a successful
 	// upload. If deletion fails we still consider the job successful because the file safely lives in Nextcloud.
 	job.Error = ""
-	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadCompleted, "", true, 0); err != nil {
+	if err := jw.ProcessStorage.UpdateProcessByID(job.ID, types.StatusUploadCompleted, 0); err != nil {
 		fmt.Printf(err.Error())
 		return
 	}

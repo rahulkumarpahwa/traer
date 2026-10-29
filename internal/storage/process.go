@@ -21,12 +21,12 @@ type ProcessStorage struct {
 type ProcessStorageInterface interface {
 	GetProcessByID(id uuid.UUID) (dto.GetProcess, error)
 	CreateProcess(id uuid.UUID, user_id uuid.UUID, url string, status types.JobStatus, processType types.ProcessType) error
-	UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error
+	UpdateProcessByID(id uuid.UUID, status types.JobStatus, retries int) error
 	GetProcesses() ([]dto.GetProcess, error)
 }
 
 func (p *ProcessStorage) GetProcesses() ([]dto.GetProcess, error) {
-	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, created_at, updated_at FROM process`)
+	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, created_at, updated_at FROM process`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare select: %v", err)
 	}
@@ -43,7 +43,7 @@ func (p *ProcessStorage) GetProcesses() ([]dto.GetProcess, error) {
 
 	var process dto.GetProcess
 	for rows.Next() {
-		err := rows.Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.CreatedAt, &process.UpdatedAt)
+		err := rows.Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.CreatedAt, &process.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -61,14 +61,14 @@ func (p *ProcessStorage) GetProcessByID(id uuid.UUID) (dto.GetProcess, error) {
 		return dto.GetProcess{}, fmt.Errorf("id should not be invalid")
 	}
 
-	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, uploaded, temp_path, created_at, updated_at FROM process WHERE id = ?`)
+	stmt, err := p.DB.Prepare(`SELECT id, user_id, url, status, process_type, retries, created_at, updated_at FROM process WHERE id = ?`)
 	if err != nil {
 		return dto.GetProcess{}, fmt.Errorf("failed to prepare select: %v", err)
 	}
 	defer stmt.Close()
 
 	var process dto.GetProcess
-	err = stmt.QueryRow(id).Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.Uploaded, &process.TempPath, &process.CreatedAt, &process.UpdatedAt)
+	err = stmt.QueryRow(id).Scan(&process.ID, &process.UserID, &process.Url, &process.Status, &process.Processtype, &process.Retries, &process.CreatedAt, &process.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return dto.GetProcess{}, err // No user found
 	} else if err != nil {
@@ -110,12 +110,12 @@ func (p *ProcessStorage) CreateProcess(id uuid.UUID, user_id uuid.UUID, url stri
 }
 
 // upgrade this method to update multiple values.
-func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus, tempPath string, uploaded bool, retries int) error {
+func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus, retries int) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("process id should not be invalid.\n")
 	}
 
-	if status == "" && tempPath == "" && !uploaded && retries < 1 {
+	if status == "" && retries < 1 {
 		slog.Error("nothing to update")
 		return nil
 	}
@@ -128,15 +128,7 @@ func (p *ProcessStorage) UpdateProcessByID(id uuid.UUID, status types.JobStatus,
 		args = append(args, status)
 	}
 
-	if tempPath != "" {
-		queryParts = append(queryParts, "temp_path = ?,")
-		args = append(args, tempPath)
-	}
 
-	if uploaded {
-		queryParts = append(queryParts, "uploaded = ?,")
-		args = append(args, 1)
-	}
 
 	if !(retries < 1) {
 		queryParts = append(queryParts, "retries = ?,")
